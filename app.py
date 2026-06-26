@@ -168,6 +168,8 @@ def init_db():
     existing_ff = {r[1] for r in conn.execute("PRAGMA table_info(favorite_foods)").fetchall()}
     if "salt_per_100" not in existing_ff:
         conn.execute("ALTER TABLE favorite_foods ADD COLUMN salt_per_100 REAL NOT NULL DEFAULT 0")
+    if "portion_g" not in existing_ff:
+        conn.execute("ALTER TABLE favorite_foods ADD COLUMN portion_g REAL DEFAULT NULL")
 
     # Migrate workouts
     existing_wk = {r[1] for r in conn.execute("PRAGMA table_info(workouts)").fetchall()}
@@ -193,6 +195,15 @@ def init_db():
     ]:
         if col not in existing_ml:
             conn.execute(f"ALTER TABLE meals ADD COLUMN {col} {defn}")
+
+    # Migrate profile (add hr_trail / hr_velo to existing DBs)
+    existing_pf = {r[1] for r in conn.execute("PRAGMA table_info(profile)").fetchall()}
+    for col, defn in [
+        ("hr_trail", "TEXT NOT NULL DEFAULT '[130,148,163,175]'"),
+        ("hr_velo",  "TEXT NOT NULL DEFAULT '[125,143,157,170]'"),
+    ]:
+        if col not in existing_pf:
+            conn.execute(f"ALTER TABLE profile ADD COLUMN {col} {defn}")
 
     if conn.execute("SELECT COUNT(*) FROM favorite_foods").fetchone()[0] == 0:
         defaults = [
@@ -551,7 +562,11 @@ def compute_carb_adjustment(wks_df: pd.DataFrame) -> int:
 
 
 def load_profile(conn) -> dict:
-    row = conn.execute("SELECT * FROM profile WHERE id=1").fetchone()
+    row = conn.execute(
+        "SELECT weight_kg, height_cm, age, sex, base_tdee, "
+        "target_carbs, target_protein, target_fat, hr_trail, hr_velo "
+        "FROM profile WHERE id=1"
+    ).fetchone()
     if row is None:
         return {
             "weight_kg": 72.0, "height_cm": 178, "age": 33, "sex": "Homme",
@@ -560,16 +575,16 @@ def load_profile(conn) -> dict:
             "hr_velo":  [125, 143, 157, 170],
         }
     return {
-        "weight_kg":      row[1],
-        "height_cm":      int(row[2]),
-        "age":            int(row[3]),
-        "sex":            row[4],
-        "base_tdee":      int(row[5]),
-        "target_carbs":   int(row[6]),
-        "target_protein": int(row[7]),
-        "target_fat":     int(row[8]),
-        "hr_trail":       json.loads(row[9]),
-        "hr_velo":        json.loads(row[10]),
+        "weight_kg":      row[0],
+        "height_cm":      int(row[1]),
+        "age":            int(row[2]),
+        "sex":            row[3],
+        "base_tdee":      int(row[4]),
+        "target_carbs":   int(row[5]),
+        "target_protein": int(row[6]),
+        "target_fat":     int(row[7]),
+        "hr_trail":       json.loads(row[8]) if row[8] else [130, 148, 163, 175],
+        "hr_velo":        json.loads(row[9]) if row[9] else [125, 143, 157, 170],
     }
 
 
@@ -954,17 +969,37 @@ def main():
         with food_c1:
             st.markdown("**Depuis les favoris**")
             fav_choice = st.selectbox("Aliment", favs["name"].tolist(), key="fav_sel")
-            fav_qty    = st.number_input("Quantité (g)", 10, 1000, 100, 10, key="fav_qty")
+            fav_row = favs[favs["name"] == fav_choice].iloc[0]
+            _has_portion = (
+                "portion_g" in favs.columns
+                and fav_row.get("portion_g") is not None
+                and not pd.isna(fav_row.get("portion_g", float("nan")))
+            )
+            if _has_portion:
+                _portion_g = float(fav_row["portion_g"])
+                _unit = st.radio(
+                    "Unité",
+                    ["Grammes", f"Portions ({_portion_g:.0f} g/portion)"],
+                    horizontal=True,
+                    key="fav_unit",
+                )
+                if _unit == "Grammes":
+                    fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
+                else:
+                    _nb = st.number_input("Nombre de portions", 0.25, 20.0, 1.0, 0.25, key="fav_nb")
+                    fav_qty_g = _nb * _portion_g
+                    st.caption(f"= {fav_qty_g:.0f} g")
+            else:
+                fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
             if st.button("➕ Ajouter au repas", key="fav_add"):
-                row = favs[favs["name"] == fav_choice].iloc[0]
-                r   = fav_qty / 100
+                r = fav_qty_g / 100
                 st.session_state.pending_foods.append({
                     "food_name": fav_choice,
-                    "quantity_g": fav_qty,
-                    "carbs_g":   round(row.carbs_per_100   * r, 1),
-                    "protein_g": round(row.protein_per_100 * r, 1),
-                    "fat_g":     round(row.fat_per_100     * r, 1),
-                    "kcal":      round(row.kcal_per_100    * r),
+                    "quantity_g": fav_qty_g,
+                    "carbs_g":   round(fav_row.carbs_per_100   * r, 1),
+                    "protein_g": round(fav_row.protein_per_100 * r, 1),
+                    "fat_g":     round(fav_row.fat_per_100     * r, 1),
+                    "kcal":      round(fav_row.kcal_per_100    * r),
                 })
                 st.rerun()
 
@@ -1044,13 +1079,20 @@ def main():
                         "Lipides / 100g", 0.0, 100.0, float(r.get("fat_per_100", 0)), 0.1, key="scan_fat")
                     scan_salt = sf6.number_input(
                         "Sel / 100g", 0.0, 10.0, float(r.get("salt_per_100", 0)), 0.01, key="scan_salt")
+                    scan_portion = st.number_input(
+                        "Taille d'une portion (g) — optionnel, 0 = pas de portion",
+                        0.0, 2000.0, 0.0, 1.0, key="scan_portion",
+                    )
                     if st.button("✅ Ajouter aux favoris", type="primary", key="scan_save"):
                         if scan_name:
+                            _scan_portion_val = float(scan_portion) if scan_portion > 0 else None
                             conn.execute(
                                 "INSERT OR REPLACE INTO favorite_foods "
-                                "(name, carbs_per_100, protein_per_100, fat_per_100, kcal_per_100, salt_per_100) "
-                                "VALUES (?,?,?,?,?,?)",
-                                (scan_name, scan_carbs, scan_prot, scan_fat, scan_kcal, scan_salt),
+                                "(name, carbs_per_100, protein_per_100, fat_per_100, "
+                                "kcal_per_100, salt_per_100, portion_g) "
+                                "VALUES (?,?,?,?,?,?,?)",
+                                (scan_name, scan_carbs, scan_prot, scan_fat,
+                                 scan_kcal, scan_salt, _scan_portion_val),
                             )
                             conn.commit()
                             st.session_state.scan_result = None
@@ -1059,29 +1101,54 @@ def main():
 
         # Favorites manager
         with st.expander("📋 Gérer les favoris"):
-            st.dataframe(
-                favs[["name", "carbs_per_100", "protein_per_100",
-                       "fat_per_100", "kcal_per_100"]].rename(
-                    columns={"name": "Aliment", "carbs_per_100": "G/100g",
-                             "protein_per_100": "P/100g", "fat_per_100": "L/100g",
-                             "kcal_per_100": "Kcal/100g"}
-                ),
-                use_container_width=True, hide_index=True,
-            )
-            st.markdown("**Ajouter un favori**")
+            _favs_disp = favs[["name", "carbs_per_100", "protein_per_100",
+                                "fat_per_100", "kcal_per_100"]].copy()
+            _favs_disp.columns = ["Aliment", "G/100g", "P/100g", "L/100g", "Kcal/100g"]
+            if "portion_g" in favs.columns:
+                _favs_disp["Portion (g)"] = favs["portion_g"].apply(
+                    lambda x: f"{x:.0f} g" if pd.notna(x) and x is not None else "—"
+                )
+            st.dataframe(_favs_disp, use_container_width=True, hide_index=True)
+
+            st.markdown("**Ajouter / modifier un favori**")
             fc1, fc2 = st.columns(2)
-            fn    = fc1.text_input("Nom",        key="fn")
-            fcarb = fc2.number_input("G/100g",    0.0, 100.0, 0.0, key="fcarb")
-            fprot = fc1.number_input("P/100g",    0.0, 100.0, 0.0, key="fprot")
-            ffat  = fc2.number_input("L/100g",    0.0, 100.0, 0.0, key="ffat")
-            fkcal = fc1.number_input("Kcal/100g", 0.0, 900.0, 0.0, key="fkcal")
+            fn = fc1.text_input("Nom", key="fn")
+
+            _fav_mode = fc2.radio(
+                "Valeurs saisies pour",
+                ["100 g", "Une portion"],
+                horizontal=True,
+                key="fav_input_mode",
+            )
+            f_portion_g = None
+            if _fav_mode == "Une portion":
+                f_portion_g = fc2.number_input(
+                    "Taille de la portion (g)", 1.0, 2000.0, 100.0, 1.0, key="f_portion_g"
+                )
+
+            fi1, fi2 = st.columns(2)
+            _unit_lbl = "100g" if _fav_mode == "100 g" else "portion"
+            fcarb = fi1.number_input(f"Glucides / {_unit_lbl}",  0.0, 500.0, 0.0, 0.1, key="fcarb")
+            fprot = fi2.number_input(f"Protéines / {_unit_lbl}", 0.0, 500.0, 0.0, 0.1, key="fprot")
+            ffat  = fi1.number_input(f"Lipides / {_unit_lbl}",   0.0, 500.0, 0.0, 0.1, key="ffat")
+            fkcal = fi2.number_input(f"Kcal / {_unit_lbl}",      0.0, 5000.0, 0.0, 1.0, key="fkcal")
+
             if st.button("Sauver favori"):
                 if fn:
+                    if _fav_mode == "Une portion" and f_portion_g:
+                        _ratio = 100.0 / f_portion_g
+                        _carb100  = round(fcarb * _ratio, 2)
+                        _prot100  = round(fprot * _ratio, 2)
+                        _fat100   = round(ffat  * _ratio, 2)
+                        _kcal100  = round(fkcal * _ratio, 2)
+                    else:
+                        _carb100, _prot100, _fat100, _kcal100 = fcarb, fprot, ffat, fkcal
+                        f_portion_g = None
                     conn.execute(
                         "INSERT OR REPLACE INTO favorite_foods "
-                        "(name,carbs_per_100,protein_per_100,fat_per_100,kcal_per_100) "
-                        "VALUES (?,?,?,?,?)",
-                        (fn, fcarb, fprot, ffat, fkcal),
+                        "(name, carbs_per_100, protein_per_100, fat_per_100, kcal_per_100, portion_g) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (fn, _carb100, _prot100, _fat100, _kcal100, f_portion_g),
                     )
                     conn.commit()
                     st.rerun()
