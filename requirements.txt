@@ -1,0 +1,8 @@
+streamlit>=1.30
+pandas>=2.0
+plotly>=5.18
+numpy>=1.24
+Pillow>=10.0
+fitparse>=1.2
+easyocr>=1.7          # OCR local — recommandé
+# pytesseract>=0.3   # alternative : nécessite `brew install tesseract`
