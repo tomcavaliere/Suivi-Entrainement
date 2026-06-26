@@ -149,6 +149,20 @@ def init_db():
         satiety INTEGER NOT NULL,
         sleep_quality INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS saved_meals (
+        id   INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT    UNIQUE NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS saved_meal_items (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        meal_id   INTEGER NOT NULL REFERENCES saved_meals(id) ON DELETE CASCADE,
+        food_name TEXT    NOT NULL,
+        quantity_g REAL   NOT NULL,
+        carbs_g    REAL   NOT NULL,
+        protein_g  REAL   NOT NULL,
+        fat_g      REAL   NOT NULL,
+        kcal       REAL   NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS profile (
         id INTEGER PRIMARY KEY CHECK (id=1),
         weight_kg REAL NOT NULL DEFAULT 72.0,
@@ -996,7 +1010,87 @@ def main():
                                     conn.commit()
                                     st.rerun()
 
+                        # ── Sauvegarder comme repas favori ──
+                        st.markdown("---")
+                        st.markdown("**⭐ Sauvegarder ce repas comme favori**")
+                        _sm_name = st.text_input(
+                            "Nom du repas favori", value=m_type, key=f"sm_name_{idx}"
+                        )
+                        if st.button("⭐ Sauvegarder", key=f"sm_save_{idx}"):
+                            if _sm_name:
+                                conn.execute(
+                                    "INSERT OR IGNORE INTO saved_meals (name) VALUES (?)",
+                                    (_sm_name,),
+                                )
+                                conn.commit()
+                                _sm_id = conn.execute(
+                                    "SELECT id FROM saved_meals WHERE name=?", (_sm_name,)
+                                ).fetchone()[0]
+                                conn.execute(
+                                    "DELETE FROM saved_meal_items WHERE meal_id=?", (_sm_id,)
+                                )
+                                for _, _srow in group.iterrows():
+                                    conn.execute(
+                                        """INSERT INTO saved_meal_items
+                                           (meal_id, food_name, quantity_g,
+                                            carbs_g, protein_g, fat_g, kcal)
+                                           VALUES (?,?,?,?,?,?,?)""",
+                                        (_sm_id, _srow.food_name, _srow.quantity_g,
+                                         _srow.carbs_g, _srow.protein_g,
+                                         _srow.fat_g, _srow.kcal),
+                                    )
+                                conn.commit()
+                                st.success(f"Repas « {_sm_name} » sauvegardé ✓")
+
                 st.markdown("---")
+
+        # ── Repas favoris : chargement rapide ──
+        _saved_meals_df = pd.read_sql_query("SELECT * FROM saved_meals ORDER BY name", conn)
+        if not _saved_meals_df.empty:
+            with st.expander("📚 Charger un repas favori"):
+                _sm_choice = st.selectbox(
+                    "Repas favori", _saved_meals_df["name"].tolist(), key="sm_choice"
+                )
+                _sm_id_load = int(
+                    _saved_meals_df[_saved_meals_df["name"] == _sm_choice].iloc[0]["id"]
+                )
+                _sm_items = pd.read_sql_query(
+                    "SELECT * FROM saved_meal_items WHERE meal_id=?",
+                    conn, params=(_sm_id_load,),
+                )
+                if not _sm_items.empty:
+                    _sm_preview = _sm_items[["food_name", "quantity_g", "carbs_g",
+                                             "protein_g", "fat_g", "kcal"]].copy()
+                    _sm_preview.columns = ["Aliment", "Qté (g)", "Gluc", "Prot", "Lip", "Kcal"]
+                    st.dataframe(_sm_preview, use_container_width=True, hide_index=True)
+                    _sm_tot = _sm_items.kcal.sum()
+                    st.caption(
+                        f"Total : {_sm_tot:.0f} kcal — "
+                        f"G {_sm_items.carbs_g.sum():.0f}g · "
+                        f"P {_sm_items.protein_g.sum():.0f}g · "
+                        f"L {_sm_items.fat_g.sum():.0f}g"
+                    )
+                    _sl1, _sl2 = st.columns(2)
+                    _sm_type = _sl1.selectbox("Type de repas", MEAL_TYPES, key="sm_load_type")
+                    _sm_time = _sl2.time_input(
+                        "Heure",
+                        value=MEAL_DEFAULT_TIME.get(_sm_type, time(12, 0)),
+                        key="sm_load_time",
+                    )
+                    if st.button("✅ Ajouter ce repas au journal", type="primary", key="sm_load_btn"):
+                        _sm_time_str = _sm_time.strftime("%H:%M")
+                        for _, _si in _sm_items.iterrows():
+                            conn.execute(
+                                """INSERT INTO meals
+                                   (date, meal_type, meal_time, food_name,
+                                    quantity_g, carbs_g, protein_g, fat_g, kcal)
+                                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                                (sel_str, _sm_type, _sm_time_str,
+                                 _si.food_name, _si.quantity_g,
+                                 _si.carbs_g, _si.protein_g, _si.fat_g, _si.kcal),
+                            )
+                        conn.commit()
+                        st.rerun()
 
         # ── Add a meal ──
         st.subheader("➕ Ajouter un repas")
@@ -1251,6 +1345,31 @@ def main():
                     )
                     conn.commit()
                     st.rerun()
+
+        with st.expander("📚 Gérer les repas favoris"):
+            _all_sm = pd.read_sql_query("SELECT * FROM saved_meals ORDER BY name", conn)
+            if _all_sm.empty:
+                st.info("Aucun repas favori sauvegardé. Utilise le bouton ⭐ dans un repas existant.")
+            else:
+                for _, _smr in _all_sm.iterrows():
+                    _smr_id = int(_smr["id"])
+                    _smr_items = pd.read_sql_query(
+                        "SELECT food_name, quantity_g, carbs_g, protein_g, fat_g, kcal "
+                        "FROM saved_meal_items WHERE meal_id=?",
+                        conn, params=(_smr_id,),
+                    )
+                    _sm_kcal = _smr_items.kcal.sum() if not _smr_items.empty else 0
+                    _sh, _sd = st.columns([5, 1])
+                    _sh.markdown(f"**{_smr['name']}** — {_sm_kcal:.0f} kcal · {len(_smr_items)} aliment(s)")
+                    if _sd.button("🗑️", key=f"del_sm_{_smr_id}", help="Supprimer ce repas favori"):
+                        conn.execute("DELETE FROM saved_meal_items WHERE meal_id=?", (_smr_id,))
+                        conn.execute("DELETE FROM saved_meals WHERE id=?", (_smr_id,))
+                        conn.commit()
+                        st.rerun()
+                    if not _smr_items.empty:
+                        _smr_items.columns = ["Aliment", "Qté (g)", "Gluc", "Prot", "Lip", "Kcal"]
+                        st.dataframe(_smr_items, use_container_width=True, hide_index=True)
+                    st.markdown("---")
 
     # ═══════════════════ TAB 2 : ENTRAÎNEMENT ═══════════════════
     with tab_training:
