@@ -850,7 +850,11 @@ def main():
 
         # ── Per-meal sections ──
         if not meals.empty:
-            meal_groups = list(meals.groupby(["meal_time", "meal_type"], sort=True))
+            _meal_order = {t: i for i, t in enumerate(MEAL_TYPES)}
+            meal_groups = sorted(
+                meals.groupby(["meal_time", "meal_type"], sort=False),
+                key=lambda x: (_meal_order.get(x[0][1], 99), x[0][0]),
+            )
             for idx, ((m_time, m_type), group) in enumerate(meal_groups):
                 emoji  = MEAL_EMOJI.get(m_type, "🍽️")
                 g_carbs = group.carbs_g.sum()
