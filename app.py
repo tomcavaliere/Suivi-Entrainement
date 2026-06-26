@@ -884,22 +884,117 @@ def main():
                     rm2.metric("Protéines", f"{g_prot:.0f}g")
                     rm3.metric("Lipides",   f"{g_fat:.0f}g")
 
-                    with st.expander("Détail des aliments"):
+                    with st.expander("✏️ Modifier ce repas"):
                         disp = group[["food_name", "quantity_g", "carbs_g",
                                       "protein_g", "fat_g", "kcal"]].copy()
                         disp.columns = ["Aliment", "Qté (g)", "Gluc", "Prot", "Lip", "Kcal"]
                         st.dataframe(disp, use_container_width=True, hide_index=True)
 
+                        # ── Supprimer un aliment ──
+                        st.markdown("**Supprimer un aliment**")
+                        _del_ids = group["id"].tolist()
+                        _del_names = {row.id: row.food_name for _, row in group.iterrows()}
                         del_food_id = st.selectbox(
-                            "Supprimer un aliment",
-                            group["id"].tolist(),
-                            format_func=lambda x: group[group.id == x].iloc[0].food_name,
+                            "Aliment à supprimer",
+                            _del_ids,
+                            format_func=lambda x: _del_names.get(x, x),
                             key=f"del_food_{idx}",
                         )
-                        if st.button("🗑️ Supprimer", key=f"del_btn_{idx}"):
+                        if st.button("🗑️ Supprimer cet aliment", key=f"del_btn_{idx}"):
                             conn.execute("DELETE FROM meals WHERE id=?", (int(del_food_id),))
                             conn.commit()
                             st.rerun()
+
+                        st.markdown("---")
+
+                        # ── Ajouter un aliment ──
+                        st.markdown("**Ajouter un aliment à ce repas**")
+                        _edit_mode = st.radio(
+                            "Source",
+                            ["Depuis les favoris", "Saisie libre"],
+                            horizontal=True,
+                            key=f"edit_mode_{idx}",
+                        )
+
+                        if _edit_mode == "Depuis les favoris":
+                            _ef_choice = st.selectbox(
+                                "Aliment", favs["name"].tolist(), key=f"edit_fav_sel_{idx}"
+                            )
+                            _ef_row = favs[favs["name"] == _ef_choice].iloc[0]
+                            _ef_has_portion = (
+                                "portion_g" in favs.columns
+                                and _ef_row.get("portion_g") is not None
+                                and not pd.isna(_ef_row.get("portion_g", float("nan")))
+                            )
+                            if _ef_has_portion:
+                                _ef_pg = float(_ef_row["portion_g"])
+                                _ef_unit = st.radio(
+                                    "Unité",
+                                    ["Grammes", f"Portions ({_ef_pg:.0f} g/portion)"],
+                                    horizontal=True,
+                                    key=f"edit_fav_unit_{idx}",
+                                )
+                                if _ef_unit == "Grammes":
+                                    _ef_qty = float(st.number_input(
+                                        "Quantité (g)", 10, 2000, 100, 10, key=f"edit_fav_qty_{idx}"
+                                    ))
+                                else:
+                                    _ef_nb = st.number_input(
+                                        "Nombre de portions", 0.25, 20.0, 1.0, 0.25,
+                                        key=f"edit_fav_nb_{idx}",
+                                    )
+                                    _ef_qty = _ef_nb * _ef_pg
+                                    st.caption(f"= {_ef_qty:.0f} g")
+                            else:
+                                _ef_qty = float(st.number_input(
+                                    "Quantité (g)", 10, 2000, 100, 10, key=f"edit_fav_qty_{idx}"
+                                ))
+                            if st.button("➕ Ajouter", key=f"edit_fav_add_{idx}"):
+                                _r = _ef_qty / 100
+                                conn.execute(
+                                    """INSERT INTO meals
+                                       (date, meal_type, meal_time, food_name,
+                                        quantity_g, carbs_g, protein_g, fat_g, kcal)
+                                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                                    (sel_str, m_type, m_time, _ef_choice, _ef_qty,
+                                     round(_ef_row.carbs_per_100   * _r, 1),
+                                     round(_ef_row.protein_per_100 * _r, 1),
+                                     round(_ef_row.fat_per_100     * _r, 1),
+                                     round(_ef_row.kcal_per_100    * _r)),
+                                )
+                                conn.commit()
+                                st.rerun()
+
+                        else:  # Saisie libre
+                            _em_name = st.text_input("Nom", key=f"edit_m_name_{idx}")
+                            _em_qty  = st.number_input(
+                                "Quantité (g)", 1, 2000, 100, key=f"edit_m_qty_{idx}"
+                            )
+                            _ec1, _ec2 = st.columns(2)
+                            _em_carbs = _ec1.number_input(
+                                "Glucides (g)", 0.0, 500.0, 0.0, 0.5, key=f"edit_m_carbs_{idx}"
+                            )
+                            _em_prot = _ec2.number_input(
+                                "Protéines (g)", 0.0, 500.0, 0.0, 0.5, key=f"edit_m_prot_{idx}"
+                            )
+                            _em_fat = _ec1.number_input(
+                                "Lipides (g)", 0.0, 500.0, 0.0, 0.5, key=f"edit_m_fat_{idx}"
+                            )
+                            _em_kcal = _ec2.number_input(
+                                "Kcal", 0.0, 5000.0, 0.0, 1.0, key=f"edit_m_kcal_{idx}"
+                            )
+                            if st.button("➕ Ajouter", key=f"edit_m_add_{idx}"):
+                                if _em_name:
+                                    conn.execute(
+                                        """INSERT INTO meals
+                                           (date, meal_type, meal_time, food_name,
+                                            quantity_g, carbs_g, protein_g, fat_g, kcal)
+                                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                                        (sel_str, m_type, m_time, _em_name, _em_qty,
+                                         _em_carbs, _em_prot, _em_fat, _em_kcal),
+                                    )
+                                    conn.commit()
+                                    st.rerun()
 
                 st.markdown("---")
 
