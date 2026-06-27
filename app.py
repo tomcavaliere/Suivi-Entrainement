@@ -176,6 +176,16 @@ def init_db():
         hr_trail TEXT NOT NULL DEFAULT '[130,148,163,175]',
         hr_velo TEXT NOT NULL DEFAULT '[125,143,157,170]'
     );
+    CREATE TABLE IF NOT EXISTS planned_workouts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        date         TEXT    NOT NULL,
+        sport        TEXT    NOT NULL DEFAULT 'Trail',
+        duration_min INTEGER NOT NULL DEFAULT 60,
+        distance_km  REAL    DEFAULT NULL,
+        elevation_m  INTEGER DEFAULT 0,
+        zone_targets TEXT    DEFAULT NULL,
+        notes        TEXT    DEFAULT ''
+    );
     """)
 
     # Migrate favorite_foods
@@ -197,6 +207,7 @@ def init_db():
         ("hr_z4_min", "REAL DEFAULT 0"),
         ("hr_z5_min", "REAL DEFAULT 0"),
         ("source", "TEXT DEFAULT 'manual'"),
+        ("distance_km", "REAL DEFAULT NULL"),
     ]:
         if col not in existing_wk:
             conn.execute(f"ALTER TABLE workouts ADD COLUMN {col} {defn}")
@@ -804,8 +815,8 @@ def main():
     with _hcol2:
         selected_date = st.date_input("📅 Date", date.today(), label_visibility="collapsed")
     sel_str = selected_date.isoformat()
-    tab_nutri, tab_training, tab_forme, tab_perf = st.tabs(
-        ["🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance"]
+    tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar = st.tabs(
+        ["🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Planning"]
     )
 
     # ═══════════════════ TAB 1 : NUTRITION ═══════════════════
@@ -1525,11 +1536,12 @@ def main():
             w_intensity = tc2.selectbox("Intensité", ["Zone 2", "Fractionné/PMA"])
             w_dur  = tc1.number_input("Durée (min)", 10, 600, 60, 5)
             w_elev = tc2.number_input("D+ (m)",       0, 5000,  0, 50)
+            w_dist = tc1.number_input("Distance (km)", 0.0, 300.0, 0.0, 0.5)
             if st.button("💾 Enregistrer séance manuelle"):
                 conn.execute(
                     "INSERT INTO workouts "
-                    "(date,type,duration_min,elevation_m,intensity,source) VALUES (?,?,?,?,?,?)",
-                    (sel_str, w_type, w_dur, w_elev, w_intensity, "manual"),
+                    "(date,type,duration_min,elevation_m,intensity,distance_km,source) VALUES (?,?,?,?,?,?,?)",
+                    (sel_str, w_type, w_dur, w_elev, w_intensity, w_dist if w_dist > 0 else None, "manual"),
                 )
                 conn.commit()
                 st.rerun()
@@ -1952,6 +1964,385 @@ def main():
             st.plotly_chart(fig_corr, use_container_width=True)
         else:
             st.caption("5 jours de données minimum pour afficher les corrélations.")
+
+    # ═══════════════════ TAB 5 : PLANNING CALENDRIER ═══════════════════
+    with tab_calendar:
+        st.markdown("## 📅 Planning")
+
+        _SPORT_EMOJI = {"Trail": "🏃", "Vélo": "🚴", "Athlé": "🏟️", "Natation": "🏊"}
+        _DAYS_FR     = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+        if "cal_week_offset" not in st.session_state:
+            st.session_state.cal_week_offset = 0
+        if "cal_edit_date" not in st.session_state:
+            st.session_state.cal_edit_date = None
+
+        _wo = st.session_state.cal_week_offset
+        _today = date.today()
+        _week_start = _today - timedelta(days=_today.weekday()) + timedelta(weeks=_wo)
+        _week_end   = _week_start + timedelta(days=6)
+        _week_dates = [_week_start + timedelta(days=i) for i in range(7)]
+        _week_strs  = [d.isoformat() for d in _week_dates]
+
+        # ── Navigation semaine ──
+        _nav1, _nav2, _nav3 = st.columns([1, 4, 1])
+        with _nav1:
+            if st.button("← Préc.", key="cal_prev"):
+                st.session_state.cal_week_offset -= 1
+                st.rerun()
+        with _nav2:
+            st.markdown(
+                f"<h3 style='text-align:center;margin:0;'>"
+                f"Semaine du {_week_start.strftime('%d %b')} au {_week_end.strftime('%d %b %Y')}"
+                f"</h3>",
+                unsafe_allow_html=True,
+            )
+        with _nav3:
+            if st.button("Suiv. →", key="cal_next"):
+                st.session_state.cal_week_offset += 1
+                st.rerun()
+
+        st.markdown("")
+
+        # ── Chargement des données de la semaine ──
+        _ph = ",".join("?" * 7)
+        _planned_wk = pd.read_sql_query(
+            f"SELECT * FROM planned_workouts WHERE date IN ({_ph}) ORDER BY date",
+            conn, params=_week_strs,
+        )
+        _actual_wk = pd.read_sql_query(
+            f"SELECT * FROM workouts WHERE date IN ({_ph}) ORDER BY date",
+            conn, params=_week_strs,
+        )
+
+        # ── Grille 7 jours ──
+        _day_cols = st.columns(7)
+        for _ci, (_col, _d) in enumerate(zip(_day_cols, _week_dates)):
+            _d_str     = _d.isoformat()
+            _is_today  = (_d == _today)
+            _is_past   = (_d < _today)
+            _plans_d   = _planned_wk[_planned_wk.date == _d_str]
+            _actuals_d = _actual_wk[_actual_wk.date  == _d_str]
+
+            with _col:
+                # En-tête du jour
+                _hdr_color = "#f1c40f" if _is_today else "#aaaaaa"
+                st.markdown(
+                    f"<div style='text-align:center;'>"
+                    f"<span style='color:{_hdr_color};font-size:0.8em;font-weight:600;'>{_DAYS_FR[_ci]}</span><br>"
+                    f"<span style='font-size:1.5em;font-weight:700;color:{_hdr_color};'>{_d.day:02d}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Session planifiée
+                if not _plans_d.empty:
+                    _p = _plans_d.iloc[0]
+                    _sem = _SPORT_EMOJI.get(_p.sport, "🏃")
+                    _det = [f"{int(_p.duration_min)}'"]
+                    if _p.distance_km:
+                        _det.append(f"{float(_p.distance_km):.1f}km")
+                    if _p.elevation_m:
+                        _det.append(f"+{int(_p.elevation_m)}m")
+                    st.markdown(
+                        f"<div style='background:#1e3a5f;border-radius:6px;padding:5px 7px;"
+                        f"margin:4px 0;font-size:0.78em;'>"
+                        f"🎯 <b>{_sem} {_p.sport}</b><br>"
+                        f"<span style='color:#aad4f5;'>{'  ·  '.join(_det)}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                # Séances réalisées
+                if not _actuals_d.empty:
+                    for _, _a in _actuals_d.iterrows():
+                        _aem  = _SPORT_EMOJI.get(_a.type, "🏃")
+                        _adet = [f"{int(_a.duration_min)}'"]
+                        _adist = getattr(_a, "distance_km", None)
+                        if _adist and pd.notna(_adist) and float(_adist) > 0:
+                            _adet.append(f"{float(_adist):.1f}km")
+                        if _a.elevation_m:
+                            _adet.append(f"+{int(_a.elevation_m)}m")
+                        _bg = "#1a472a" if not _plans_d.empty else "#2d3748"
+                        st.markdown(
+                            f"<div style='background:{_bg};border-radius:6px;padding:5px 7px;"
+                            f"margin:4px 0;font-size:0.78em;'>"
+                            f"✅ <b>{_aem} {_a.type}</b><br>"
+                            f"<span style='color:#a8e6b4;'>{'  ·  '.join(_adet)}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                elif not _plans_d.empty and _is_past:
+                    st.markdown(
+                        "<div style='background:#4a1515;border-radius:6px;padding:5px 7px;"
+                        "margin:4px 0;font-size:0.78em;text-align:center;'>"
+                        "⚠️ Manqué"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                # Bouton édition
+                _btn_lbl = "✏️" if not _plans_d.empty else "➕"
+                if st.button(_btn_lbl, key=f"cal_btn_{_d_str}", use_container_width=True,
+                             help=f"Planifier le {_d_str}"):
+                    st.session_state.cal_edit_date = _d_str
+                    st.rerun()
+
+        st.markdown("---")
+
+        # ── Formulaire de planification ──
+        _edit_date = st.session_state.cal_edit_date
+        if _edit_date:
+            _ep = pd.read_sql_query(
+                "SELECT * FROM planned_workouts WHERE date=?", conn, params=(_edit_date,)
+            )
+            _has_plan = not _ep.empty
+            _p0 = _ep.iloc[0] if _has_plan else None
+
+            _sport_opts = ["Trail", "Vélo", "Athlé", "Natation"]
+            st.subheader(
+                f"{'✏️ Modifier' if _has_plan else '➕ Planifier'} — {_edit_date}"
+            )
+
+            _pf1, _pf2 = st.columns(2)
+            _pf_sport = _pf1.selectbox(
+                "Sport", _sport_opts,
+                index=_sport_opts.index(_p0.sport) if _has_plan and _p0.sport in _sport_opts else 0,
+                key="pf_sport",
+            )
+            _pf_dur = _pf2.number_input(
+                "Durée cible (min)", 10, 600,
+                int(_p0.duration_min) if _has_plan else 60, 5, key="pf_dur",
+            )
+            _pf_dist = _pf1.number_input(
+                "Distance cible (km)", 0.0, 300.0,
+                float(_p0.distance_km) if _has_plan and _p0.distance_km else 0.0,
+                0.5, key="pf_dist",
+            )
+            _pf_elev = _pf2.number_input(
+                "D+ cible (m)", 0, 5000,
+                int(_p0.elevation_m) if _has_plan else 0, 50, key="pf_elev",
+            )
+
+            with st.expander("🎯 Objectifs zones FC (optionnel)"):
+                _zt_def = json.loads(_p0.zone_targets) if (_has_plan and _p0.zone_targets) else [0]*5
+                _zt_cols = st.columns(5)
+                _pf_zt = [
+                    _zt_cols[_zi].number_input(
+                        _ZONE_LABELS[_zi], 0, 300, int(_zt_def[_zi]), 5,
+                        key=f"pf_zt{_zi}",
+                    )
+                    for _zi in range(5)
+                ]
+
+            _pf_notes = st.text_area(
+                "Notes / description de la séance",
+                value=_p0.notes if _has_plan and _p0.notes else "",
+                key="pf_notes",
+            )
+
+            _bc1, _bc2, _bc3 = st.columns([3, 1, 1])
+            if _bc1.button("💾 Sauvegarder", type="primary", key="pf_save"):
+                _zt_json  = json.dumps(_pf_zt) if any(_v > 0 for _v in _pf_zt) else None
+                _dist_val = float(_pf_dist) if _pf_dist > 0 else None
+                if _has_plan:
+                    conn.execute(
+                        "UPDATE planned_workouts SET sport=?, duration_min=?, distance_km=?, "
+                        "elevation_m=?, zone_targets=?, notes=? WHERE id=?",
+                        (_pf_sport, _pf_dur, _dist_val, _pf_elev, _zt_json, _pf_notes, int(_p0.id)),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO planned_workouts "
+                        "(date, sport, duration_min, distance_km, elevation_m, zone_targets, notes) "
+                        "VALUES (?,?,?,?,?,?,?)",
+                        (_edit_date, _pf_sport, _pf_dur, _dist_val, _pf_elev, _zt_json, _pf_notes),
+                    )
+                conn.commit()
+                st.success("Plan sauvegardé ✓")
+                st.session_state.cal_edit_date = None
+                st.rerun()
+
+            if _has_plan and _bc2.button("🗑️ Supprimer", key="pf_del"):
+                conn.execute("DELETE FROM planned_workouts WHERE id=?", (int(_p0.id),))
+                conn.commit()
+                st.session_state.cal_edit_date = None
+                st.rerun()
+
+            if _bc3.button("✖ Annuler", key="pf_cancel"):
+                st.session_state.cal_edit_date = None
+                st.rerun()
+
+        # ── Graphiques Objectifs vs Réalisé ──
+        st.markdown("---")
+        st.subheader("📊 Objectifs vs Réalisé")
+
+        _period_map = {"4 semaines": 4, "8 semaines": 8, "12 semaines": 12}
+        _period_sel = st.selectbox("Période", list(_period_map.keys()), key="cal_period")
+        _n_wks      = _period_map[_period_sel]
+
+        _cmp_end   = _today
+        _cmp_start = _today - timedelta(weeks=_n_wks)
+
+        _all_plan = pd.read_sql_query(
+            "SELECT * FROM planned_workouts WHERE date BETWEEN ? AND ? ORDER BY date",
+            conn, params=(_cmp_start.isoformat(), _cmp_end.isoformat()),
+        )
+        _all_act = pd.read_sql_query(
+            "SELECT * FROM workouts WHERE date BETWEEN ? AND ? ORDER BY date",
+            conn, params=(_cmp_start.isoformat(), _cmp_end.isoformat()),
+        )
+
+        if _all_plan.empty and _all_act.empty:
+            st.caption("Aucune donnée de planification sur la période sélectionnée. "
+                       "Commence par planifier des séances avec le calendrier ci-dessus.")
+        else:
+            def _wk_monday(d_str: str) -> str:
+                _dd = date.fromisoformat(d_str)
+                return (_dd - timedelta(days=_dd.weekday())).isoformat()
+
+            _wks: dict = {}
+            _empty_wk = lambda: {
+                "plan_dur": 0, "plan_elev": 0, "plan_dist": 0,
+                "real_dur": 0, "real_elev": 0, "real_dist": 0,
+                "plan_z": [0.0]*5, "real_z": [0.0]*5,
+            }
+
+            for _, _r in _all_plan.iterrows():
+                _wk = _wk_monday(_r.date)
+                if _wk not in _wks:
+                    _wks[_wk] = _empty_wk()
+                _wks[_wk]["plan_dur"]  += int(_r.duration_min)
+                _wks[_wk]["plan_elev"] += int(_r.elevation_m or 0)
+                _wks[_wk]["plan_dist"] += float(_r.distance_km or 0)
+                if _r.zone_targets:
+                    _zt = json.loads(_r.zone_targets)
+                    for _zi in range(5):
+                        _wks[_wk]["plan_z"][_zi] += _zt[_zi]
+
+            for _, _r in _all_act.iterrows():
+                _wk = _wk_monday(_r.date)
+                if _wk not in _wks:
+                    _wks[_wk] = _empty_wk()
+                _wks[_wk]["real_dur"]  += int(_r.duration_min)
+                _wks[_wk]["real_elev"] += int(_r.elevation_m or 0)
+                _rd = getattr(_r, "distance_km", None)
+                if _rd and pd.notna(_rd):
+                    _wks[_wk]["real_dist"] += float(_rd)
+                for _zi, _zc in enumerate(
+                    ["hr_z1_min", "hr_z2_min", "hr_z3_min", "hr_z4_min", "hr_z5_min"]
+                ):
+                    _wks[_wk]["real_z"][_zi] += float(getattr(_r, _zc, 0) or 0)
+
+            _sorted_wks = sorted(_wks.keys())
+            _wk_lbls    = [f"S {_w[5:7]}/{_w[8:10]}" for _w in _sorted_wks]
+
+            # Graphique Durée + D+
+            _gc1, _gc2 = st.columns(2)
+
+            with _gc1:
+                _fig_dur = go.Figure()
+                _fig_dur.add_trace(go.Bar(
+                    name="Planifié", x=_wk_lbls,
+                    y=[_wks[_w]["plan_dur"] for _w in _sorted_wks],
+                    marker_color="#3498db", opacity=0.75,
+                ))
+                _fig_dur.add_trace(go.Bar(
+                    name="Réalisé", x=_wk_lbls,
+                    y=[_wks[_w]["real_dur"] for _w in _sorted_wks],
+                    marker_color="#2ecc71",
+                ))
+                _fig_dur.update_layout(
+                    title="Durée (min)", barmode="group", height=280,
+                    margin=dict(t=40, b=20, l=30, r=10),
+                    legend=dict(orientation="h", y=-0.25),
+                )
+                st.plotly_chart(_fig_dur, use_container_width=True)
+
+            with _gc2:
+                _fig_elev = go.Figure()
+                _fig_elev.add_trace(go.Bar(
+                    name="Planifié", x=_wk_lbls,
+                    y=[_wks[_w]["plan_elev"] for _w in _sorted_wks],
+                    marker_color="#3498db", opacity=0.75,
+                ))
+                _fig_elev.add_trace(go.Bar(
+                    name="Réalisé", x=_wk_lbls,
+                    y=[_wks[_w]["real_elev"] for _w in _sorted_wks],
+                    marker_color="#2ecc71",
+                ))
+                _fig_elev.update_layout(
+                    title="Dénivelé positif (m)", barmode="group", height=280,
+                    margin=dict(t=40, b=20, l=30, r=10),
+                    legend=dict(orientation="h", y=-0.25),
+                )
+                st.plotly_chart(_fig_elev, use_container_width=True)
+
+            # Graphique Distance (si données)
+            _has_dist = any(
+                _wks[_w]["plan_dist"] > 0 or _wks[_w]["real_dist"] > 0
+                for _w in _sorted_wks
+            )
+            if _has_dist:
+                _fig_dist = go.Figure()
+                _fig_dist.add_trace(go.Bar(
+                    name="Planifié", x=_wk_lbls,
+                    y=[_wks[_w]["plan_dist"] for _w in _sorted_wks],
+                    marker_color="#3498db", opacity=0.75,
+                ))
+                _fig_dist.add_trace(go.Bar(
+                    name="Réalisé", x=_wk_lbls,
+                    y=[_wks[_w]["real_dist"] for _w in _sorted_wks],
+                    marker_color="#2ecc71",
+                ))
+                _fig_dist.update_layout(
+                    title="Distance (km)", barmode="group", height=260,
+                    margin=dict(t=40, b=20, l=30, r=10),
+                    legend=dict(orientation="h", y=-0.25),
+                )
+                st.plotly_chart(_fig_dist, use_container_width=True)
+
+            # Graphique Zones FC planifiées vs réalisées
+            _has_plan_z = any(any(_wks[_w]["plan_z"]) for _w in _sorted_wks)
+            _has_real_z = any(any(_wks[_w]["real_z"]) for _w in _sorted_wks)
+
+            if _has_plan_z or _has_real_z:
+                st.markdown("**Temps dans les zones FC — planifié vs réalisé**")
+                _zg1, _zg2 = st.columns(2)
+
+                if _has_plan_z:
+                    with _zg1:
+                        _fig_zp = go.Figure()
+                        for _zi in range(5):
+                            _fig_zp.add_trace(go.Bar(
+                                name=_ZONE_LABELS[_zi], x=_wk_lbls,
+                                y=[_wks[_w]["plan_z"][_zi] for _w in _sorted_wks],
+                                marker_color=_ZONE_COLORS[_zi],
+                            ))
+                        _fig_zp.update_layout(
+                            title="Zones planifiées (min)", barmode="stack", height=300,
+                            margin=dict(t=40, b=20, l=30, r=10),
+                            yaxis_title="min",
+                            legend=dict(orientation="h", y=-0.35, font=dict(size=10)),
+                        )
+                        st.plotly_chart(_fig_zp, use_container_width=True)
+
+                if _has_real_z:
+                    with _zg2:
+                        _fig_zr = go.Figure()
+                        for _zi in range(5):
+                            _fig_zr.add_trace(go.Bar(
+                                name=_ZONE_LABELS[_zi], x=_wk_lbls,
+                                y=[_wks[_w]["real_z"][_zi] for _w in _sorted_wks],
+                                marker_color=_ZONE_COLORS[_zi],
+                            ))
+                        _fig_zr.update_layout(
+                            title="Zones réalisées (min)", barmode="stack", height=300,
+                            margin=dict(t=40, b=20, l=30, r=10),
+                            yaxis_title="min",
+                            legend=dict(orientation="h", y=-0.35, font=dict(size=10)),
+                        )
+                        st.plotly_chart(_fig_zr, use_container_width=True)
 
     conn.close()
 
