@@ -320,8 +320,8 @@ def _extract_hr_raw(data: bytes) -> list:
             if pos + n_fields * 3 > len(data):
                 break
 
-            total_size = ts_off = ts_sz = hr_off = hr_sz = None
             total_size = 0
+            ts_off = ts_sz = hr_off = hr_sz = None
             for _ in range(n_fields):
                 fnum  = data[pos]; pos += 1
                 fsize = data[pos]; pos += 1
@@ -336,17 +336,20 @@ def _extract_hr_raw(data: bytes) -> list:
                 n_dev = data[pos]; pos += 1
                 pos += n_dev * 3
 
-            if global_num == 20:
-                local_defs[local_type] = dict(
-                    size=total_size, le=le,
-                    ts_off=ts_off, ts_sz=ts_sz,
-                    hr_off=hr_off, hr_sz=hr_sz,
-                )
+            # Store ALL definition types (not just record/20) so data messages
+            # for session/lap/event/etc. can be skipped rather than breaking.
+            local_defs[local_type] = dict(
+                size=total_size, le=le,
+                ts_off=ts_off, ts_sz=ts_sz,
+                hr_off=hr_off, hr_sz=hr_sz,
+            )
 
         # ── Data message ──────────────────────────────────────────────────
         else:
             if local_type not in local_defs:
-                break  # unknown size — can't skip safely
+                # Definition not seen yet — can't determine size, abort.
+                # This only happens if the FIT file is malformed (data before def).
+                break
             d = local_defs[local_type]
             if pos + d['size'] > len(data):
                 break
@@ -356,7 +359,8 @@ def _extract_hr_raw(data: bytes) -> list:
             if d['ts_off'] is not None and d['ts_sz'] == 4:
                 fmt32 = '<I' if d['le'] else '>I'
                 ts = _s.unpack_from(fmt32, rec, d['ts_off'])[0]
-                last_ts = ts
+                if ts:
+                    last_ts = ts  # update for compressed-timestamp continuity
             if ts and d['hr_off'] is not None and d['hr_sz'] == 1:
                 hr = rec[d['hr_off']]
                 if 30 < hr < 220:
@@ -428,8 +432,10 @@ def parse_fit(file_bytes: bytes, zone_map: dict) -> dict:
     if raw_hr_ts:
         for i in range(1, len(raw_hr_ts)):
             dt = raw_hr_ts[i][0] - raw_hr_ts[i - 1][0]  # int seconds
-            if dt <= 0 or dt > 300:
+            if dt < 0 or dt > 300:
                 continue
+            if dt == 0:
+                dt = 1  # 1 Hz recording: same timestamp means 1 s elapsed
             z_sec[_assign_zone(raw_hr_ts[i - 1][1], bounds)] += dt
 
     # Tier 2 — lap summaries if raw extraction gave < 50 % coverage
