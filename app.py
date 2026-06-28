@@ -729,6 +729,52 @@ def hr_zone_chart(z1, z2, z3, z4, z5, bounds=None) -> go.Figure:
 
 
 # ─────────────────────────────────────────────
+# HRV / Forme — évaluation des métriques
+# ─────────────────────────────────────────────
+
+def _hrv_badge(label: str, color: str) -> str:
+    return (
+        f"<div style='text-align:center;margin-top:-12px;margin-bottom:6px;'>"
+        f"<span style='background:{color};color:#fff;padding:2px 10px;"
+        f"border-radius:10px;font-size:0.74em;font-weight:600'>{label}</span></div>"
+    )
+
+def _hrv_eval_readiness(v: float):
+    if v >= 80:  return ("Élevé",    "#3498db")
+    if v >= 50:  return ("Normal",   "#2ecc71")
+    if v >= 30:  return ("Bas",      "#f39c12")
+    return           ("Très bas",  "#e74c3c")
+
+def _hrv_eval_rmssd(v: float):
+    if v > 75:   return ("Excellent", "#3498db")
+    if v >= 50:  return ("Bon",       "#2ecc71")
+    if v >= 19:  return ("Normal",    "#f39c12")
+    return           ("Faible",    "#e74c3c")
+
+def _hrv_eval_pns(v: float):
+    if v > 1:    return ("Élevé",  "#3498db")
+    if v >= -1:  return ("Normal", "#2ecc71")
+    return           ("Faible", "#e74c3c")
+
+def _hrv_eval_sns(v: float):
+    if v > 1:    return ("Élevé", "#e74c3c")
+    if v >= -1:  return ("Normal", "#2ecc71")
+    return           ("Bas",    "#3498db")
+
+def _hrv_eval_hr(v: int):
+    if v < 40:   return ("Très bas",  "#9b59b6")
+    if v <= 60:  return ("Athlète",   "#2ecc71")
+    if v <= 77:  return ("Normal",    "#f39c12")
+    return           ("Élevé",    "#e74c3c")
+
+def _hrv_eval_sleep_h(v: float):
+    if 7.0 <= v <= 9.0:  return ("Optimal",     "#2ecc71")
+    if v >= 6.0:         return ("Insuffisant",  "#f39c12")
+    if v > 9.0:          return ("Prolongé",     "#3498db")
+    return                    ("Trop court",  "#e74c3c")
+
+
+# ─────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────
 
@@ -1629,23 +1675,59 @@ def main():
                 unsafe_allow_html=True,
             )
             _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
-            _sm1.metric(
-                "Readiness",
-                f"{_readiness:.0f}%",
-                f"⏱ {ml_row[8]}" if ml_row[8] is not None else "",
-            )
-            _sm2.metric(
-                "Sommeil",
-                f"{float(ml_row[1]):.1f}h" if ml_row[1] is not None else "—",
-                f"Qualité {ml_row[2]}/5" if ml_row[2] is not None else "",
-            )
-            _sm3.metric("RMSSD", f"{float(ml_row[4]):.0f} ms" if ml_row[4] is not None else "—")
-            _sm4.metric(
-                "PNS / SNS",
-                f"{float(ml_row[5]):+.1f} / {float(ml_row[6]):+.1f}"
-                if ml_row[5] is not None else "—",
-            )
-            _sm5.metric("FC repos", f"{int(ml_row[7])} bpm" if ml_row[7] is not None else "—")
+
+            with _sm1:
+                st.metric(
+                    "Readiness",
+                    f"{_readiness:.0f}%",
+                    f"⏱ {ml_row[8]}" if ml_row[8] is not None else "",
+                )
+                _lbl, _clr = _hrv_eval_readiness(_readiness)
+                st.markdown(_hrv_badge(_lbl, _clr), unsafe_allow_html=True)
+
+            with _sm2:
+                _sleep_h = float(ml_row[1]) if ml_row[1] is not None else None
+                st.metric(
+                    "Sommeil",
+                    f"{_sleep_h:.1f}h" if _sleep_h is not None else "—",
+                    f"Qualité {ml_row[2]}/5" if ml_row[2] is not None else "",
+                )
+                if _sleep_h is not None:
+                    _lbl, _clr = _hrv_eval_sleep_h(_sleep_h)
+                    st.markdown(_hrv_badge(_lbl, _clr), unsafe_allow_html=True)
+
+            with _sm3:
+                _rmssd = float(ml_row[4]) if ml_row[4] is not None else None
+                st.metric("RMSSD", f"{_rmssd:.0f} ms" if _rmssd is not None else "—")
+                if _rmssd is not None:
+                    _lbl, _clr = _hrv_eval_rmssd(_rmssd)
+                    st.markdown(_hrv_badge(_lbl, _clr), unsafe_allow_html=True)
+
+            with _sm4:
+                _pns = float(ml_row[5]) if ml_row[5] is not None else None
+                _sns = float(ml_row[6]) if ml_row[6] is not None else None
+                st.metric(
+                    "PNS / SNS",
+                    f"{_pns:+.1f} / {_sns:+.1f}" if _pns is not None else "—",
+                )
+                if _pns is not None:
+                    _lp, _cp = _hrv_eval_pns(_pns)
+                    _ls, _cs = _hrv_eval_sns(_sns if _sns is not None else 0.0)
+                    st.markdown(
+                        f"<div style='text-align:center;margin-top:-12px;margin-bottom:6px;'>"
+                        f"<span style='background:{_cp};color:#fff;padding:2px 7px;"
+                        f"border-radius:10px;font-size:0.72em;font-weight:600'>PNS {_lp}</span> "
+                        f"<span style='background:{_cs};color:#fff;padding:2px 7px;"
+                        f"border-radius:10px;font-size:0.72em;font-weight:600'>SNS {_ls}</span></div>",
+                        unsafe_allow_html=True,
+                    )
+
+            with _sm5:
+                _hr = int(ml_row[7]) if ml_row[7] is not None else None
+                st.metric("FC repos", f"{_hr} bpm" if _hr is not None else "—")
+                if _hr is not None:
+                    _lbl, _clr = _hrv_eval_hr(_hr)
+                    st.markdown(_hrv_badge(_lbl, _clr), unsafe_allow_html=True)
 
         # ── Formulaire dans un expander ──
         _exp_label = (
