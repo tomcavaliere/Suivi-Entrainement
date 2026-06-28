@@ -1591,7 +1591,6 @@ def main():
     # ═══════════════════ TAB 3 : FORME ═══════════════════
     with tab_forme:
         day_fr_forme = selected_date.strftime("%A %d %B %Y").capitalize()
-        st.subheader(f"🌅 Routine du matin — {day_fr_forme}")
 
         ml_row = conn.execute(
             "SELECT weight_kg, sleep_duration_h, sleep_quality, hrv_readiness, "
@@ -1599,117 +1598,140 @@ def main():
             (sel_str,),
         ).fetchone()
 
-        with st.form("morning_form"):
-            fm_c1, fm_c2 = st.columns(2)
+        _ml_done = ml_row is not None and any(v is not None for v in ml_row)
 
-            with fm_c1:
-                st.markdown("**⚖️ Corps & Sommeil**")
-                fm_weight  = st.number_input(
-                    "Poids (kg)", 40.0, 150.0,
-                    float(ml_row[0]) if ml_row and ml_row[0] is not None else weight_current,
-                    0.1,
-                )
-                fm_sleep_h = st.number_input(
-                    "Durée sommeil (h)", 0.0, 14.0,
-                    float(ml_row[1]) if ml_row and ml_row[1] is not None else 7.5,
-                    0.25,
-                )
-                fm_sleep_q = st.slider(
-                    "Qualité sommeil (1–5)", 1, 5,
-                    int(ml_row[2]) if ml_row and ml_row[2] is not None else 3,
-                )
-
-            with fm_c2:
-                st.markdown("**🫀 Kubios HRV**")
-                _hrv_time_default = (
-                    time(int(ml_row[8].split(":")[0]), int(ml_row[8].split(":")[1]))
-                    if ml_row and ml_row[8] is not None
-                    else time(7, 0)
-                )
-                fm_hrv_time = st.time_input("Heure de mesure HRV", _hrv_time_default)
-                fm_readiness = st.number_input(
-                    "Readiness (%)", 0, 100,
-                    int(ml_row[3]) if ml_row and ml_row[3] is not None else 70,
-                )
-                fm_rmssd = st.number_input(
-                    "RMSSD (ms)", 0.0, 250.0,
-                    float(ml_row[4]) if ml_row and ml_row[4] is not None else 50.0,
-                    0.5,
-                )
-                fm_pns = st.number_input(
-                    "PNS index", -5.0, 5.0,
-                    float(ml_row[5]) if ml_row and ml_row[5] is not None else 0.0,
-                    0.1,
-                )
-                fm_sns = st.number_input(
-                    "SNS index", -5.0, 5.0,
-                    float(ml_row[6]) if ml_row and ml_row[6] is not None else 0.0,
-                    0.1,
-                )
-                fm_mean_hr = st.number_input(
-                    "FC repos (bpm)", 30, 120,
-                    int(ml_row[7]) if ml_row and ml_row[7] is not None else 50,
-                )
-
-            if st.form_submit_button("💾 Enregistrer la matinée", type="primary"):
-                conn.execute(
-                    """INSERT OR REPLACE INTO morning_log
-                       (date, weight_kg, sleep_duration_h, sleep_quality,
-                        hrv_readiness, hrv_rmssd, hrv_pns, hrv_sns, hrv_mean_hr, hrv_time)
-                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                    (sel_str, fm_weight, fm_sleep_h, fm_sleep_q,
-                     fm_readiness, fm_rmssd, fm_pns, fm_sns, fm_mean_hr,
-                     fm_hrv_time.strftime("%H:%M")),
-                )
-                conn.execute(
-                    "INSERT OR REPLACE INTO weight_log (date, weight_kg) VALUES (?,?)",
-                    (sel_str, fm_weight),
-                )
-                conn.commit()
-                st.rerun()
-
-        if ml_row:
-            if st.button("🗑️ Supprimer cette matinée", key="del_morning"):
-                conn.execute("DELETE FROM morning_log WHERE date=?", (sel_str,))
-                conn.execute("DELETE FROM weight_log WHERE date=?", (sel_str,))
-                conn.commit()
-                st.rerun()
-
-        # Reload after possible save
-        ml_row = conn.execute(
-            "SELECT weight_kg, sleep_duration_h, sleep_quality, hrv_readiness, "
-            "hrv_rmssd, hrv_pns, hrv_sns, hrv_mean_hr, hrv_time FROM morning_log WHERE date=?",
-            (sel_str,),
-        ).fetchone()
-
-        if ml_row and ml_row[3] is not None:
-            readiness = float(ml_row[3])
-            r_color = "#2ecc71" if readiness >= 70 else "#f1c40f" if readiness >= 50 else "#e74c3c"
-            r_label = "Optimal" if readiness >= 70 else "Modéré" if readiness >= 50 else "Faible"
-            st.markdown("---")
-            st.markdown(
-                f"### Forme du jour : "
-                f"<span style='color:{r_color}'>{readiness:.0f}% — {r_label}</span>",
+        # ── En-tête avec statut ──
+        _hd_col, _st_col = st.columns([5, 1])
+        _hd_col.subheader(f"🌅 Routine du matin — {day_fr_forme}")
+        if _ml_done:
+            _st_col.markdown(
+                "<div style='text-align:right;padding-top:8px;font-size:1.6em;' "
+                "title='Routine complétée'>✅</div>",
                 unsafe_allow_html=True,
             )
-            sm1, sm2, sm3, sm4, sm5 = st.columns(5)
-            sm1.metric(
+        else:
+            _st_col.markdown(
+                "<div style='text-align:right;padding-top:8px;font-size:1.6em;' "
+                "title='Routine non saisie'>⚠️</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Résumé visible si données présentes ──
+        if _ml_done and ml_row[3] is not None:
+            _readiness = float(ml_row[3])
+            _r_color   = "#2ecc71" if _readiness >= 70 else "#f1c40f" if _readiness >= 50 else "#e74c3c"
+            _r_label   = "Optimal" if _readiness >= 70 else "Modéré" if _readiness >= 50 else "Faible"
+            st.markdown(
+                f"<p style='font-size:1.1em;margin:0 0 8px 0;'>"
+                f"Forme du jour : "
+                f"<b style='color:{_r_color}'>{_readiness:.0f}% — {_r_label}</b>"
+                f"</p>",
+                unsafe_allow_html=True,
+            )
+            _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
+            _sm1.metric(
                 "Readiness",
-                f"{readiness:.0f}%",
+                f"{_readiness:.0f}%",
                 f"⏱ {ml_row[8]}" if ml_row[8] is not None else "",
             )
-            sm2.metric(
+            _sm2.metric(
                 "Sommeil",
                 f"{float(ml_row[1]):.1f}h" if ml_row[1] is not None else "—",
                 f"Qualité {ml_row[2]}/5" if ml_row[2] is not None else "",
             )
-            sm3.metric("RMSSD", f"{float(ml_row[4]):.0f} ms" if ml_row[4] is not None else "—")
-            sm4.metric(
+            _sm3.metric("RMSSD", f"{float(ml_row[4]):.0f} ms" if ml_row[4] is not None else "—")
+            _sm4.metric(
                 "PNS / SNS",
                 f"{float(ml_row[5]):+.1f} / {float(ml_row[6]):+.1f}"
                 if ml_row[5] is not None else "—",
             )
-            sm5.metric("FC repos", f"{int(ml_row[7])} bpm" if ml_row[7] is not None else "—")
+            _sm5.metric("FC repos", f"{int(ml_row[7])} bpm" if ml_row[7] is not None else "—")
+
+        # ── Formulaire dans un expander ──
+        _exp_label = (
+            "✏️ Modifier la routine du matin" if _ml_done else "➕ Saisir la routine du matin"
+        )
+        with st.expander(_exp_label, expanded=not _ml_done):
+            with st.form("morning_form"):
+                fm_c1, fm_c2 = st.columns(2)
+
+                with fm_c1:
+                    st.markdown("**⚖️ Corps & Sommeil**")
+                    fm_weight  = st.number_input(
+                        "Poids (kg)", 40.0, 150.0,
+                        float(ml_row[0]) if ml_row and ml_row[0] is not None else weight_current,
+                        0.1,
+                    )
+                    fm_sleep_h = st.number_input(
+                        "Durée sommeil (h)", 0.0, 14.0,
+                        float(ml_row[1]) if ml_row and ml_row[1] is not None else 7.5,
+                        0.25,
+                    )
+                    fm_sleep_q = st.slider(
+                        "Qualité sommeil (1–5)", 1, 5,
+                        int(ml_row[2]) if ml_row and ml_row[2] is not None else 3,
+                    )
+
+                with fm_c2:
+                    st.markdown("**🫀 Kubios HRV**")
+                    _hrv_time_default = (
+                        time(int(ml_row[8].split(":")[0]), int(ml_row[8].split(":")[1]))
+                        if ml_row and ml_row[8] is not None
+                        else time(7, 0)
+                    )
+                    fm_hrv_time  = st.time_input("Heure de mesure HRV", _hrv_time_default)
+                    fm_readiness = st.number_input(
+                        "Readiness (%)", 0, 100,
+                        int(ml_row[3]) if ml_row and ml_row[3] is not None else 70,
+                    )
+                    fm_rmssd = st.number_input(
+                        "RMSSD (ms)", 0.0, 250.0,
+                        float(ml_row[4]) if ml_row and ml_row[4] is not None else 50.0,
+                        0.5,
+                    )
+                    fm_pns = st.number_input(
+                        "PNS index", -5.0, 5.0,
+                        float(ml_row[5]) if ml_row and ml_row[5] is not None else 0.0,
+                        0.1,
+                    )
+                    fm_sns = st.number_input(
+                        "SNS index", -5.0, 5.0,
+                        float(ml_row[6]) if ml_row and ml_row[6] is not None else 0.0,
+                        0.1,
+                    )
+                    fm_mean_hr = st.number_input(
+                        "FC repos (bpm)", 30, 120,
+                        int(ml_row[7]) if ml_row and ml_row[7] is not None else 50,
+                    )
+
+                _fsub1, _fsub2 = st.columns([3, 1])
+                if _fsub1.form_submit_button(
+                    "💾 Enregistrer" if not _ml_done else "💾 Mettre à jour",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    conn.execute(
+                        """INSERT OR REPLACE INTO morning_log
+                           (date, weight_kg, sleep_duration_h, sleep_quality,
+                            hrv_readiness, hrv_rmssd, hrv_pns, hrv_sns, hrv_mean_hr, hrv_time)
+                           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        (sel_str, fm_weight, fm_sleep_h, fm_sleep_q,
+                         fm_readiness, fm_rmssd, fm_pns, fm_sns, fm_mean_hr,
+                         fm_hrv_time.strftime("%H:%M")),
+                    )
+                    conn.execute(
+                        "INSERT OR REPLACE INTO weight_log (date, weight_kg) VALUES (?,?)",
+                        (sel_str, fm_weight),
+                    )
+                    conn.commit()
+                    st.rerun()
+
+                # Bouton supprimer dans le formulaire (visible seulement si données existantes)
+                if _ml_done and _fsub2.form_submit_button("🗑️ Effacer", use_container_width=True):
+                    conn.execute("DELETE FROM morning_log WHERE date=?", (sel_str,))
+                    conn.execute("DELETE FROM weight_log WHERE date=?", (sel_str,))
+                    conn.commit()
+                    st.rerun()
 
         # Historical trends
         morning_hist = pd.read_sql_query("SELECT * FROM morning_log ORDER BY date", conn)
