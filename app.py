@@ -6,6 +6,7 @@ Lancer : streamlit run app.py
 
 import io
 import json
+import math
 import re
 import sqlite3
 from datetime import date, time, timedelta
@@ -208,6 +209,7 @@ def init_db():
         ("hr_z5_min", "REAL DEFAULT 0"),
         ("source", "TEXT DEFAULT 'manual'"),
         ("distance_km", "REAL DEFAULT NULL"),
+        ("rpe", "INTEGER DEFAULT NULL"),
     ]:
         if col not in existing_wk:
             conn.execute(f"ALTER TABLE workouts ADD COLUMN {col} {defn}")
@@ -224,8 +226,10 @@ def init_db():
     # Migrate profile (add hr_trail / hr_velo to existing DBs)
     existing_pf = {r[1] for r in conn.execute("PRAGMA table_info(profile)").fetchall()}
     for col, defn in [
-        ("hr_trail", "TEXT NOT NULL DEFAULT '[130,148,163,175]'"),
-        ("hr_velo",  "TEXT NOT NULL DEFAULT '[125,143,157,170]'"),
+        ("hr_trail",  "TEXT NOT NULL DEFAULT '[130,148,163,175]'"),
+        ("hr_velo",   "TEXT NOT NULL DEFAULT '[125,143,157,170]'"),
+        ("hr_repos",  "INTEGER DEFAULT 50"),
+        ("hr_max",    "INTEGER DEFAULT 185"),
     ]:
         if col not in existing_pf:
             conn.execute(f"ALTER TABLE profile ADD COLUMN {col} {defn}")
@@ -241,9 +245,7 @@ def init_db():
             ("Houmous sans huile",  14.0,  8.0,  6.0, 150),
             ("Beurre de cacahuète", 20.0, 25.0, 50.0, 588),
             ("Riz (cuit)",          28.0,  2.7,  0.3, 130),
-            ("Poulet (cuit)",        0.0, 31.0,  3.6, 165),
             ("Lentilles (cuites)",  20.0,  9.0,  0.4, 116),
-            ("Fromage blanc 0%",     4.0, 12.0,  0.2,  46),
         ]
         conn.executemany(
             "INSERT INTO favorite_foods "
@@ -595,7 +597,7 @@ def compute_carb_adjustment(wks_df: pd.DataFrame) -> int:
 def load_profile(conn) -> dict:
     row = conn.execute(
         "SELECT weight_kg, height_cm, age, sex, base_tdee, "
-        "target_carbs, target_protein, target_fat, hr_trail, hr_velo "
+        "target_carbs, target_protein, target_fat, hr_trail, hr_velo, hr_repos, hr_max "
         "FROM profile WHERE id=1"
     ).fetchone()
     if row is None:
@@ -604,6 +606,8 @@ def load_profile(conn) -> dict:
             "base_tdee": 1800, "target_carbs": 350, "target_protein": 120, "target_fat": 80,
             "hr_trail": [130, 148, 163, 175],
             "hr_velo":  [125, 143, 157, 170],
+            "hr_repos": 50,
+            "hr_max":   185,
         }
     return {
         "weight_kg":      row[0],
@@ -616,6 +620,8 @@ def load_profile(conn) -> dict:
         "target_fat":     int(row[7]),
         "hr_trail":       json.loads(row[8]) if row[8] else [130, 148, 163, 175],
         "hr_velo":        json.loads(row[9]) if row[9] else [125, 143, 157, 170],
+        "hr_repos":       int(row[10]) if row[10] is not None else 50,
+        "hr_max":         int(row[11]) if row[11] is not None else 185,
     }
 
 
@@ -623,11 +629,13 @@ def save_profile(conn, p: dict):
     conn.execute(
         """INSERT OR REPLACE INTO profile
            (id, weight_kg, height_cm, age, sex, base_tdee,
-            target_carbs, target_protein, target_fat, hr_trail, hr_velo)
-           VALUES (1,?,?,?,?,?,?,?,?,?,?)""",
+            target_carbs, target_protein, target_fat, hr_trail, hr_velo,
+            hr_repos, hr_max)
+           VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (p["weight_kg"], p["height_cm"], p["age"], p["sex"],
          p["base_tdee"], p["target_carbs"], p["target_protein"], p["target_fat"],
-         json.dumps(p["hr_trail"]), json.dumps(p["hr_velo"])),
+         json.dumps(p["hr_trail"]), json.dumps(p["hr_velo"]),
+         p["hr_repos"], p["hr_max"]),
     )
     conn.commit()
 
@@ -641,6 +649,114 @@ def load_meals(conn, d: str) -> pd.DataFrame:
 
 def load_workouts(conn, d: str) -> pd.DataFrame:
     return pd.read_sql_query("SELECT * FROM workouts WHERE date=?", conn, params=(d,))
+
+
+# ─────────────────────────────────────────────
+# Training load metrics
+# ─────────────────────────────────────────────
+
+def compute_srpe(rpe, duration_min):
+    if rpe is None:
+        return None
+    return float(rpe) * float(duration_min)
+
+
+def compute_trimp(duration_min, avg_hr, hr_repos, hr_max):
+    if avg_hr is None:
+        return None
+    hr_range = float(hr_max) - float(hr_repos)
+    if hr_range <= 0:
+        return None
+    delta = (float(avg_hr) - float(hr_repos)) / hr_range
+    if delta <= 0:
+        return None
+    return float(duration_min) * delta * 0.64 * math.exp(1.92 * delta)
+
+
+def load_charge_history(conn, hr_repos: int, hr_max: int) -> pd.DataFrame:
+    """Return daily DataFrame with srpe, trimp, ATL, CTL, TSB over all history."""
+    all_wks = pd.read_sql_query(
+        "SELECT date, duration_min, avg_hr, rpe FROM workouts ORDER BY date",
+        conn,
+    )
+    if all_wks.empty:
+        return pd.DataFrame(columns=["date", "srpe", "trimp", "ATL", "CTL", "TSB"])
+
+    # Aggregate by day
+    daily_acc: dict = {}
+    for _, r in all_wks.iterrows():
+        d = r["date"]
+        if d not in daily_acc:
+            daily_acc[d] = {"srpe": 0.0, "trimp": 0.0, "has_srpe": False, "has_trimp": False}
+        rpe_val = int(r["rpe"]) if pd.notna(r["rpe"]) else None
+        hr_val  = float(r["avg_hr"]) if pd.notna(r["avg_hr"]) else None
+        sr = compute_srpe(rpe_val, int(r["duration_min"]))
+        tr = compute_trimp(int(r["duration_min"]), hr_val, hr_repos, hr_max)
+        if sr is not None:
+            daily_acc[d]["srpe"] += sr
+            daily_acc[d]["has_srpe"] = True
+        if tr is not None:
+            daily_acc[d]["trimp"] += tr
+            daily_acc[d]["has_trimp"] = True
+
+    dates_sorted = sorted(daily_acc.keys())
+    date_range = pd.date_range(dates_sorted[0], dates_sorted[-1], freq="D")
+
+    rows = []
+    for ts in date_range:
+        ds = ts.date().isoformat()
+        rec = daily_acc.get(ds, {})
+        rows.append({
+            "date":  ts,
+            "srpe":  rec.get("srpe", 0.0),
+            "trimp": rec.get("trimp") if rec.get("has_trimp") else None,
+        })
+    daily = pd.DataFrame(rows)
+
+    # ATL / CTL / TSB (exponential decay, k=1/7 and 1/42)
+    k_atl, k_ctl = 1.0 / 7.0, 1.0 / 42.0
+    atl = ctl = 0.0
+    atl_list, ctl_list, tsb_list = [], [], []
+    for srpe_val in daily["srpe"]:
+        charge = float(srpe_val)
+        atl = atl * (1 - k_atl) + charge * k_atl
+        ctl = ctl * (1 - k_ctl) + charge * k_ctl
+        atl_list.append(round(atl, 2))
+        ctl_list.append(round(ctl, 2))
+        tsb_list.append(round(ctl - atl, 2))
+
+    daily["ATL"] = atl_list
+    daily["CTL"] = ctl_list
+    daily["TSB"] = tsb_list
+    return daily
+
+
+def compute_weekly_monotony_strain(daily_df: pd.DataFrame, weeks: int = 12) -> pd.DataFrame:
+    """Monotony and strain per calendar week for the last `weeks` weeks."""
+    if daily_df.empty:
+        return pd.DataFrame(columns=["week_start", "load_sum", "monotony", "strain"])
+
+    today   = pd.Timestamp(date.today())
+    monday  = today - pd.Timedelta(days=today.weekday())
+    records = []
+    for w in range(weeks - 1, -1, -1):
+        w_start  = monday - pd.Timedelta(weeks=w)
+        w_end    = w_start + pd.Timedelta(days=6)
+        mask     = (daily_df["date"] >= w_start) & (daily_df["date"] <= w_end)
+        charges  = daily_df.loc[mask, "srpe"].fillna(0.0).values
+        if len(charges) == 0:
+            charges = np.zeros(7)
+        mean_c   = float(np.mean(charges))
+        std_c    = float(np.std(charges))
+        monotony = mean_c / std_c if std_c > 1e-6 else 1.0
+        load_sum = float(np.sum(charges))
+        records.append({
+            "week_start": w_start.strftime("%d/%m"),
+            "load_sum":   round(load_sum, 1),
+            "monotony":   round(monotony, 2),
+            "strain":     round(load_sum * monotony, 1),
+        })
+    return pd.DataFrame(records)
 
 
 # ─────────────────────────────────────────────
@@ -849,6 +965,10 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
     }
 
     st.sidebar.markdown("---")
+    st.sidebar.caption("FC physiologique (pour TRIMP)")
+    hr_repos_sb = st.sidebar.number_input("FC repos (bpm)", 30, 100, prof["hr_repos"])
+    hr_max_sb   = st.sidebar.number_input("FC max (bpm)", 140, 220, prof["hr_max"])
+    st.sidebar.markdown("---")
     if st.sidebar.button("💾 Sauvegarder le profil"):
         save_profile(conn, {
             "weight_kg":      weight_current,
@@ -861,6 +981,8 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
             "target_fat":     int(target_fat),
             "hr_trail":       [int(tz1), int(tz2), int(tz3), int(tz4)],
             "hr_velo":        [int(vz1), int(vz2), int(vz3), int(vz4)],
+            "hr_repos":       int(hr_repos_sb),
+            "hr_max":         int(hr_max_sb),
         })
         st.sidebar.success("Profil sauvegardé ✓")
 
@@ -1790,6 +1912,11 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                                     })
                                     st.rerun()
 
+                    _fit_rpe_check = st.checkbox("Renseigner le RPE", key="fit_rpe_check")
+                    _fit_rpe = None
+                    if _fit_rpe_check:
+                        _fit_rpe = st.slider("RPE (effort perçu 1-10)", 1, 10, 7, key="fit_rpe_slider")
+
                     if st.button("💾 Enregistrer la séance FIT"):
                         dur = fit_data["duration_min"] or 60
                         hard_min = z_vals[3] + z_vals[4]
@@ -1798,11 +1925,11 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                             """INSERT INTO workouts
                                (date, type, duration_min, elevation_m, intensity,
                                 kcal_actual, avg_hr, max_hr_session,
-                                hr_z1_min, hr_z2_min, hr_z3_min, hr_z4_min, hr_z5_min, source)
-                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                hr_z1_min, hr_z2_min, hr_z3_min, hr_z4_min, hr_z5_min, source, rpe)
+                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (sel_str, fit_sport, dur, fit_data["elevation_m"], intensity,
                              fit_data["calories"], fit_data["avg_hr"], fit_data["max_hr_session"],
-                             *z_vals, "fit"),
+                             *z_vals, "fit", _fit_rpe),
                         )
                         for food in st.session_state.pending_fit_foods:
                             conn.execute(
@@ -1828,11 +1955,15 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
             w_dur  = tc1.number_input("Durée (min)", 10, 600, 60, 5)
             w_elev = tc2.number_input("D+ (m)",       0, 5000,  0, 50)
             w_dist = tc1.number_input("Distance (km)", 0.0, 300.0, 0.0, 0.5)
+            _man_rpe_check = st.checkbox("Renseigner le RPE", key="man_rpe_check")
+            _man_rpe = None
+            if _man_rpe_check:
+                _man_rpe = st.slider("RPE (effort perçu 1-10)", 1, 10, 7, key="man_rpe_slider")
             if st.button("💾 Enregistrer séance manuelle"):
                 conn.execute(
                     "INSERT INTO workouts "
-                    "(date,type,duration_min,elevation_m,intensity,distance_km,source) VALUES (?,?,?,?,?,?,?)",
-                    (sel_str, w_type, w_dur, w_elev, w_intensity, w_dist if w_dist > 0 else None, "manual"),
+                    "(date,type,duration_min,elevation_m,intensity,distance_km,source,rpe) VALUES (?,?,?,?,?,?,?,?)",
+                    (sel_str, w_type, w_dur, w_elev, w_intensity, w_dist if w_dist > 0 else None, "manual", _man_rpe),
                 )
                 conn.commit()
                 st.rerun()
@@ -2313,6 +2444,126 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
             st.plotly_chart(fig_corr, use_container_width=True)
         else:
             st.caption("5 jours de données minimum pour afficher les corrélations.")
+
+        # ── Métriques de charge sRPE / TRIMP ──────────────────────────────
+        st.markdown("---")
+        st.subheader("Métriques de charge d'entraînement (sRPE / TRIMP)")
+
+        _daily_df = load_charge_history(conn, prof["hr_repos"], prof["hr_max"])
+        if _daily_df.empty or _daily_df["srpe"].sum() == 0:
+            st.info(
+                "Aucune séance avec RPE renseigné. "
+                "Ajoute un RPE à tes séances (onglet Entraînement) pour activer ces métriques."
+            )
+        else:
+            # Graphe 1 : ATL / CTL / TSB — 90 derniers jours
+            _cutoff_90 = pd.Timestamp(date.today()) - pd.Timedelta(days=89)
+            _df_90 = _daily_df[_daily_df["date"] >= _cutoff_90]
+            if not _df_90.empty:
+                fig_pmc = go.Figure()
+                fig_pmc.add_trace(go.Scatter(
+                    x=_df_90["date"], y=_df_90["ATL"],
+                    name="ATL — Fatigue", line=dict(color="#f85149", width=2),
+                ))
+                fig_pmc.add_trace(go.Scatter(
+                    x=_df_90["date"], y=_df_90["CTL"],
+                    name="CTL — Forme", line=dict(color="#3fb950", width=2),
+                ))
+                fig_pmc.add_trace(go.Scatter(
+                    x=_df_90["date"], y=_df_90["TSB"],
+                    name="TSB — Fraîcheur", line=dict(color="#d29922", width=2),
+                    fill="tozeroy", fillcolor="rgba(210,153,34,0.08)",
+                ))
+                fig_pmc.add_hline(y=0, line_color="#555", line_width=1)
+                fig_pmc.update_layout(
+                    height=320,
+                    title="ATL / CTL / TSB — 90 derniers jours",
+                    yaxis_title="Charge (u.a.)",
+                    legend=dict(orientation="h", y=-0.25),
+                    margin=dict(t=40, b=20, l=40, r=10),
+                )
+                st.plotly_chart(fig_pmc, use_container_width=True)
+
+            # Graphe 2 : Monotonie + Strain — 12 semaines
+            _weekly_df = compute_weekly_monotony_strain(_daily_df, weeks=12)
+            if not _weekly_df.empty and _weekly_df["load_sum"].sum() > 0:
+                fig_ms = go.Figure()
+                fig_ms.add_trace(go.Bar(
+                    x=_weekly_df["week_start"], y=_weekly_df["strain"],
+                    name="Strain", marker_color="#a371f7",
+                ))
+                fig_ms.add_trace(go.Scatter(
+                    x=_weekly_df["week_start"], y=_weekly_df["monotony"],
+                    name="Monotonie", mode="lines+markers",
+                    line=dict(color="#39c5cf", width=2),
+                    yaxis="y2",
+                ))
+                fig_ms.update_layout(
+                    height=300,
+                    title="Monotonie & Strain — 12 semaines",
+                    yaxis=dict(title="Strain"),
+                    yaxis2=dict(
+                        title="Monotonie", overlaying="y", side="right",
+                        showgrid=False, rangemode="tozero",
+                    ),
+                    legend=dict(orientation="h", y=-0.3),
+                    margin=dict(t=40, b=20, l=40, r=10),
+                )
+                st.plotly_chart(fig_ms, use_container_width=True)
+
+            # Graphe 3 : sRPE + TRIMP par séance — 30 jours
+            _cutoff_30 = (date.today() - timedelta(days=29)).isoformat()
+            _sess_30 = pd.read_sql_query(
+                "SELECT date, type, duration_min, avg_hr, rpe FROM workouts "
+                "WHERE date >= ? ORDER BY date",
+                conn, params=(_cutoff_30,),
+            )
+            if not _sess_30.empty:
+                _sess_30["srpe"] = _sess_30.apply(
+                    lambda r: compute_srpe(
+                        int(r["rpe"]) if pd.notna(r["rpe"]) else None,
+                        r["duration_min"],
+                    ), axis=1,
+                )
+                _sess_30["trimp"] = _sess_30.apply(
+                    lambda r: compute_trimp(
+                        r["duration_min"],
+                        float(r["avg_hr"]) if pd.notna(r["avg_hr"]) else None,
+                        prof["hr_repos"], prof["hr_max"],
+                    ), axis=1,
+                )
+                _sess_30["label"] = _sess_30["date"].str[5:] + " " + _sess_30["type"]
+                _has_srpe_30  = _sess_30["srpe"].notna().any()
+                _has_trimp_30 = _sess_30["trimp"].notna().any()
+                if _has_srpe_30 or _has_trimp_30:
+                    fig_st30 = go.Figure()
+                    if _has_srpe_30:
+                        fig_st30.add_trace(go.Bar(
+                            x=_sess_30["label"], y=_sess_30["srpe"],
+                            name="sRPE", marker_color="#f0883e",
+                        ))
+                    if _has_trimp_30:
+                        fig_st30.add_trace(go.Bar(
+                            x=_sess_30["label"], y=_sess_30["trimp"],
+                            name="TRIMP", marker_color="#39c5cf",
+                            yaxis="y2",
+                        ))
+                    _extra_layout = {}
+                    if _has_trimp_30:
+                        _extra_layout["yaxis2"] = dict(
+                            title="TRIMP", overlaying="y", side="right", showgrid=False,
+                        )
+                    fig_st30.update_layout(
+                        height=300,
+                        title="sRPE & TRIMP par séance — 30 jours",
+                        barmode="group",
+                        yaxis=dict(title="sRPE"),
+                        legend=dict(orientation="h", y=-0.3),
+                        margin=dict(t=40, b=20, l=40, r=10),
+                        xaxis=dict(tickangle=-45),
+                        **_extra_layout,
+                    )
+                    st.plotly_chart(fig_st30, use_container_width=True)
 
     # ═══════════════════ TAB 5 : PLANNING CALENDRIER ═══════════════════
     with tab_calendar:
