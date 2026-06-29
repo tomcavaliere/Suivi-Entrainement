@@ -1999,6 +1999,49 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                 "Prévois 60-80g de glucides dans les 2h avant et 40-60g dans les 30min post-effort."
             )
 
+            # ── Modifier une séance ──
+            with st.expander("✏️ Modifier une séance"):
+                edit_opts = {int(w.id): f"{w.type} — {w.duration_min}min ({w.source})"
+                             for _, w in wks.iterrows()}
+                edit_id = st.selectbox("Séance à modifier", list(edit_opts.keys()),
+                                       format_func=lambda x: edit_opts[x],
+                                       key="edit_wk_sel")
+                _ew = wks[wks["id"] == edit_id].iloc[0] if not wks[wks["id"] == edit_id].empty else None
+                if _ew is not None:
+                    _cur_rpe = int(_ew["rpe"]) if pd.notna(_ew.get("rpe")) and _ew.get("rpe") is not None else None
+                    _edit_rpe_check = st.checkbox(
+                        "RPE renseigné",
+                        value=_cur_rpe is not None,
+                        key="edit_rpe_check",
+                    )
+                    _edit_rpe = None
+                    if _edit_rpe_check:
+                        _edit_rpe = st.slider(
+                            "RPE (effort perçu 1-10)", 1, 10,
+                            _cur_rpe if _cur_rpe is not None else 7,
+                            key="edit_rpe_slider",
+                        )
+                    _edit_dur = st.number_input(
+                        "Durée (min)", 1, 600, int(_ew["duration_min"]) if pd.notna(_ew["duration_min"]) else 60,
+                        key="edit_dur",
+                    )
+                    _edit_type = st.selectbox(
+                        "Sport", ["Trail", "Vélo", "Athlé", "Natation"],
+                        index=["Trail", "Vélo", "Athlé", "Natation"].index(_ew["type"])
+                        if _ew["type"] in ["Trail", "Vélo", "Athlé", "Natation"] else 0,
+                        key="edit_type",
+                    )
+                    if st.button("💾 Sauvegarder les modifications", key="edit_wk_save"):
+                        conn.execute(
+                            "UPDATE workouts SET rpe=?, duration_min=?, type=? WHERE id=?",
+                            (_edit_rpe, _edit_dur, _edit_type, edit_id),
+                        )
+                        conn.commit()
+                        st.success("Séance mise à jour ✓")
+                        st.rerun()
+
+            st.markdown("---")
+
             del_opts = {int(w.id): f"{w.type} — {w.duration_min}min ({w.source})"
                         for _, w in wks.iterrows()}
             del_id = st.selectbox("Supprimer une séance", list(del_opts.keys()),
