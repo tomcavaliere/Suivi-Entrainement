@@ -71,8 +71,8 @@ MEAL_DEFAULT_TIME = {
     "Pendant l'effort":      time(10, 0),
 }
 
-_COLORS = {"Glucides": "#2ecc71", "Protéines": "#3498db", "Lipides": "#e67e22"}
-_ZONE_COLORS = ["#95a5a6", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c"]
+_COLORS = {"Glucides": "#39c5cf", "Protéines": "#a371f7", "Lipides": "#d29922"}
+_ZONE_COLORS = ["#3fb950", "#39c5cf", "#d29922", "#f0883e", "#f85149"]
 _ZONE_LABELS = ["Z1 Récup", "Z2 Aérobie", "Z3 Tempo", "Z4 Seuil", "Z5 PMA"]
 
 # ─────────────────────────────────────────────
@@ -782,6 +782,15 @@ def main():
     st.set_page_config(page_title="Perf Nutrition", page_icon="⚡", layout="wide")
     init_db()
 
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input { font-family: 'Space Grotesk', sans-serif !important; }
+[data-testid="stMetricValue"] { font-family: 'IBM Plex Mono', monospace !important; }
+[data-testid="stMetricLabel"] { font-family: 'IBM Plex Mono', monospace !important; letter-spacing: 0.08em !important; text-transform: uppercase !important; font-size: 0.72em !important; }
+</style>
+""", unsafe_allow_html=True)
+
     if "pending_foods" not in st.session_state:
         st.session_state.pending_foods = []
     if "pending_fit_foods" not in st.session_state:
@@ -861,9 +870,245 @@ def main():
     with _hcol2:
         selected_date = st.date_input("📅 Date", date.today(), label_visibility="collapsed")
     sel_str = selected_date.isoformat()
-    tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar = st.tabs(
-        ["🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Planning"]
+    tab_vue, tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar = st.tabs(
+        ["⚡ Vue d'ensemble", "🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Planning"]
     )
+
+    # ═══════════════════ TAB 0 : VUE D'ENSEMBLE ═══════════════════
+    with tab_vue:
+        today     = date.today()
+        today_str = today.isoformat()
+        day_num   = (today - date(today.year, 1, 1)).days + 1
+
+        ml = conn.execute(
+            "SELECT hrv_readiness, hrv_rmssd, hrv_pns, hrv_sns, hrv_mean_hr, "
+            "sleep_duration_h, hrv_time FROM morning_log WHERE date=?",
+            (today_str,),
+        ).fetchone()
+        meals_v = load_meals(conn, today_str)
+        wks_v   = load_workouts(conn, today_str)
+        exp_v   = (
+            sum(workout_kcal(w, weight_current) for _, w in wks_v.iterrows())
+            if not wks_v.empty else 0.0
+        )
+        target_kcal_v = base_tdee + exp_v
+
+        # ── Status banner ──
+        if ml and ml[0] is not None:
+            rv = float(ml[0])
+            if rv >= 70:
+                bg, bdr, dot = "rgba(63,185,80,.14)", "rgba(63,185,80,.3)", "#3fb950"
+                msg = f"<b>Jour vert.</b> <span style='color:#a9b1ba;'>Readiness {rv:.0f}% — tu peux pousser aujourd'hui.</span>"
+            elif rv >= 50:
+                bg, bdr, dot = "rgba(210,153,34,.14)", "rgba(210,153,34,.3)", "#d29922"
+                msg = f"<b>Jour modéré.</b> <span style='color:#a9b1ba;'>Readiness {rv:.0f}% — séance légère recommandée.</span>"
+            else:
+                bg, bdr, dot = "rgba(248,81,73,.14)", "rgba(248,81,73,.3)", "#f85149"
+                msg = f"<b>Jour rouge.</b> <span style='color:#a9b1ba;'>Readiness {rv:.0f}% — récupération prioritaire.</span>"
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:12px;background:{bg};"
+                f"border:1px solid {bdr};border-radius:10px;padding:13px 16px;margin-bottom:14px;'>"
+                f"<div style='width:8px;height:8px;border-radius:50%;background:{dot};flex:none;'></div>"
+                f"<div style='font-size:13px;color:#e6edf3;'>{msg}</div></div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Hero: jauge Readiness + tuiles HRV ──
+        col_g, col_t = st.columns([1, 2])
+
+        with col_g:
+            if ml and ml[0] is not None:
+                rv = float(ml[0])
+                r_color = "#3fb950" if rv >= 70 else "#d29922" if rv >= 50 else "#f85149"
+                r_label, _ = _hrv_eval_readiness(rv)
+                fig_gauge = go.Figure(go.Pie(
+                    values=[rv, 100 - rv], hole=0.72,
+                    marker=dict(colors=[r_color, "#21262d"], line=dict(width=0)),
+                    textinfo="none", sort=False, direction="clockwise", rotation=90,
+                ))
+                fig_gauge.update_layout(
+                    height=200, margin=dict(t=10, b=10, l=10, r=10),
+                    showlegend=False,
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    annotations=[
+                        dict(text=f"<b>{rv:.0f}</b>", x=0.5, y=0.57, showarrow=False,
+                             font=dict(size=38, color=r_color, family="IBM Plex Mono")),
+                        dict(text="%", x=0.5, y=0.32, showarrow=False,
+                             font=dict(size=14, color="#7d8590")),
+                    ],
+                )
+                st.markdown(
+                    "<div style='font-family:IBM Plex Mono,monospace;font-size:10px;"
+                    "letter-spacing:2px;color:#7d8590;text-transform:uppercase;"
+                    "text-align:center;padding-top:8px;'>Readiness</div>",
+                    unsafe_allow_html=True,
+                )
+                st.plotly_chart(fig_gauge, use_container_width=True, key="vue_gauge")
+                st.markdown(
+                    f"<div style='text-align:center;margin-top:-12px;'>"
+                    f"<span style='background:rgba(63,185,80,.12);color:{r_color};"
+                    f"font-size:12px;font-weight:600;padding:4px 14px;border-radius:20px;'>"
+                    f"{r_label}</span></div>",
+                    unsafe_allow_html=True,
+                )
+                if ml[6]:
+                    st.markdown(
+                        f"<p style='text-align:center;font-family:IBM Plex Mono,monospace;"
+                        f"font-size:11px;color:#7d8590;margin-top:6px;'>mesuré {ml[6]}</p>",
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.info("Routine matinale non saisie — va dans l'onglet 🫀 Forme.")
+
+        with col_t:
+            rmssd_v = float(ml[1]) if ml and ml[1] is not None else None
+            fc_v    = int(ml[4])   if ml and ml[4] is not None else None
+            pns_v   = float(ml[2]) if ml and ml[2] is not None else None
+            sns_v   = float(ml[3]) if ml and ml[3] is not None else None
+            sleep_v = float(ml[5]) if ml and ml[5] is not None else None
+
+            _t1, _t2 = st.columns(2)
+            _t3, _t4 = st.columns(2)
+
+            with _t1:
+                if rmssd_v is not None:
+                    lbl, _ = _hrv_eval_rmssd(rmssd_v)
+                    st.metric("RMSSD", f"{rmssd_v:.0f} ms", lbl)
+                else:
+                    st.metric("RMSSD", "—")
+
+            with _t2:
+                if fc_v is not None:
+                    lbl, _ = _hrv_eval_hr(fc_v)
+                    st.metric("FC repos", f"{fc_v} bpm", lbl)
+                else:
+                    st.metric("FC repos", "—")
+
+            with _t3:
+                if pns_v is not None and sns_v is not None:
+                    lp, _ = _hrv_eval_pns(pns_v)
+                    st.metric("PNS / SNS", f"{pns_v:+.1f} / {sns_v:+.1f}", lp)
+                else:
+                    st.metric("PNS / SNS", "—")
+
+            with _t4:
+                if sleep_v is not None:
+                    lbl, _ = _hrv_eval_sleep_h(sleep_v)
+                    st.metric("Sommeil", f"{sleep_v:.1f} h", lbl)
+                else:
+                    st.metric("Sommeil", "—")
+
+        st.markdown("---")
+
+        # ── Nutrition + Entraînement ──
+        c_n, c_t = st.columns(2)
+
+        with c_n:
+            st.markdown(
+                "<div style='font-family:IBM Plex Mono,monospace;font-size:11px;"
+                "letter-spacing:2px;color:#7d8590;text-transform:uppercase;"
+                "margin-bottom:10px;'>Nutrition · balance</div>",
+                unsafe_allow_html=True,
+            )
+            if not meals_v.empty:
+                tot_k_v = meals_v.kcal.sum()
+                tot_c_v = meals_v.carbs_g.sum()
+                tot_p_v = meals_v.protein_g.sum()
+                tot_f_v = meals_v.fat_g.sum()
+                bal_v   = tot_k_v - target_kcal_v
+
+                vn1, vn2 = st.columns(2)
+                vn1.metric("Apport", f"{tot_k_v:.0f} kcal")
+                vn2.metric("Balance", f"{bal_v:+.0f} kcal", delta_color="off")
+
+                for lbl_m, val_m, tgt_m, clr_m in [
+                    ("GLUCIDES",  tot_c_v, target_carbs,   "#39c5cf"),
+                    ("PROTÉINES", tot_p_v, target_protein, "#a371f7"),
+                    ("LIPIDES",   tot_f_v, target_fat,     "#d29922"),
+                ]:
+                    pct_m = min(val_m / tgt_m * 100, 100) if tgt_m > 0 else 0
+                    st.markdown(
+                        f"<div style='margin-bottom:8px;'>"
+                        f"<div style='display:flex;justify-content:space-between;"
+                        f"font-family:IBM Plex Mono,monospace;font-size:10px;color:#7d8590;margin-bottom:3px;'>"
+                        f"<span>{lbl_m}</span><span>{val_m:.0f} / {tgt_m} g</span></div>"
+                        f"<div style='height:6px;background:#21262d;border-radius:3px;overflow:hidden;'>"
+                        f"<div style='width:{pct_m:.0f}%;height:100%;background:{clr_m};'></div>"
+                        f"</div></div>",
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("Aucun repas enregistré aujourd'hui.")
+
+        with c_t:
+            st.markdown(
+                "<div style='font-family:IBM Plex Mono,monospace;font-size:11px;"
+                "letter-spacing:2px;color:#7d8590;text-transform:uppercase;"
+                "margin-bottom:10px;'>Entraînement</div>",
+                unsafe_allow_html=True,
+            )
+            if not wks_v.empty:
+                tot_dur_v  = wks_v.duration_min.sum()
+                tot_elev_v = wks_v.elevation_m.fillna(0).sum()
+                z_v        = [wks_v[f"hr_z{i}_min"].fillna(0).sum() for i in range(1, 6)]
+                kcal_v_t   = sum(workout_kcal(w, weight_current) for _, w in wks_v.iterrows())
+
+                vt1, vt2 = st.columns(2)
+                vt1.metric("Durée", f"{int(tot_dur_v // 60)}h{int(tot_dur_v % 60):02d}")
+                vt2.metric("Kcal", f"{kcal_v_t:.0f}")
+
+                if sum(z_v) > 0:
+                    zone_clrs_v = ["#3fb950", "#39c5cf", "#d29922", "#f0883e", "#f85149"]
+                    fig_zv = go.Figure(data=[go.Bar(
+                        x=["Z1", "Z2", "Z3", "Z4", "Z5"],
+                        y=z_v, marker_color=zone_clrs_v, showlegend=False,
+                    )])
+                    fig_zv.update_layout(
+                        height=110, margin=dict(t=0, b=20, l=0, r=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        yaxis=dict(visible=False),
+                        xaxis=dict(tickfont=dict(size=9, color="#7d8590"),
+                                   tickcolor="rgba(0,0,0,0)"),
+                        bargap=0.25,
+                    )
+                    st.plotly_chart(fig_zv, use_container_width=True, key="vue_zones")
+                else:
+                    st.metric("D+", f"{int(tot_elev_v)} m")
+            else:
+                st.caption("Aucune séance enregistrée aujourd'hui.")
+
+        st.markdown("---")
+
+        # ── Charge hebdo 7j ──
+        wk7_start = (date.today() - timedelta(days=6)).isoformat()
+        wk7 = pd.read_sql_query(
+            "SELECT date, SUM(duration_min) as total_min FROM workouts "
+            "WHERE date >= ? GROUP BY date ORDER BY date",
+            conn, params=(wk7_start,),
+        )
+        total_wk7 = int(wk7.total_min.sum()) if not wk7.empty else 0
+        st.markdown(
+            f"<div style='display:flex;justify-content:space-between;"
+            f"font-family:IBM Plex Mono,monospace;font-size:11px;letter-spacing:1.5px;"
+            f"color:#7d8590;text-transform:uppercase;margin-bottom:6px;'>"
+            f"<span>Charge hebdo · 7j</span>"
+            f"<span style='color:#3fb950;'>{total_wk7} min</span></div>",
+            unsafe_allow_html=True,
+        )
+        if not wk7.empty:
+            fig_wk7 = go.Figure(go.Scatter(
+                x=wk7.date, y=wk7.total_min,
+                mode="lines", line=dict(color="#39c5cf", width=2.5),
+                fill="tozeroy", fillcolor="rgba(57,197,207,0.08)",
+            ))
+            fig_wk7.update_layout(
+                height=80, margin=dict(t=4, b=4, l=4, r=4),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(visible=False), yaxis=dict(visible=False),
+            )
+            st.plotly_chart(fig_wk7, use_container_width=True, key="vue_weekly")
+        else:
+            st.caption("Aucune donnée d'entraînement cette semaine.")
 
     # ═══════════════════ TAB 1 : NUTRITION ═══════════════════
     with tab_nutri:
