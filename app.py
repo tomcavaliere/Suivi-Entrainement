@@ -871,7 +871,7 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
         selected_date = st.date_input("📅 Date", date.today(), label_visibility="collapsed")
     sel_str = selected_date.isoformat()
     tab_vue, tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar = st.tabs(
-        ["⚡ Vue d'ensemble", "🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Planning"]
+        ["⚡ Vue d'ensemble", "🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Calendrier"]
     )
 
     # ═══════════════════ TAB 0 : VUE D'ENSEMBLE ═══════════════════
@@ -2316,126 +2316,190 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
 
     # ═══════════════════ TAB 5 : PLANNING CALENDRIER ═══════════════════
     with tab_calendar:
-        st.markdown("## 📅 Planning")
+        st.markdown("## 📅 Calendrier")
 
-        _SPORT_EMOJI = {"Trail": "🏃", "Vélo": "🚴", "Athlé": "🏟️", "Natation": "🏊"}
-        _DAYS_FR     = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+        _SPORT_COLORS = {
+            "Vélo":     "#3b82f6",
+            "Trail":    "#22c55e",
+            "Cap":      "#22c55e",
+            "Athlé":    "#f97316",
+            "Natation": "#06b6d4",
+        }
+        _DAYS_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+        def _csize(dur_min: float) -> float:
+            return max(18.0, min(66.0, 18.0 + (min(float(dur_min), 180.0) - 15.0) / 165.0 * 48.0))
+
+        def _circles_html(act_list: list, plan_list: list) -> str:
+            html = "<div style='position:relative;height:70px;'>"
+            for act in sorted(act_list, key=lambda x: x["duration_min"], reverse=True):
+                sz = _csize(act["duration_min"])
+                c  = _SPORT_COLORS.get(act["type"], "#888888")
+                html += (
+                    f"<div style='position:absolute;width:{sz:.0f}px;height:{sz:.0f}px;"
+                    f"border-radius:50%;background:{c};opacity:0.82;"
+                    f"left:50%;top:50%;transform:translate(-50%,-50%);'></div>"
+                )
+            for plan in sorted(plan_list, key=lambda x: x["duration_min"], reverse=True):
+                sz = _csize(plan["duration_min"])
+                html += (
+                    f"<div style='position:absolute;width:{sz:.0f}px;height:{sz:.0f}px;"
+                    f"border-radius:50%;border:2px dashed #7d8590;background:transparent;"
+                    f"left:50%;top:50%;transform:translate(-50%,-50%);'></div>"
+                )
+            html += "</div>"
+            return html
+
+        def _fmt_wk_summary(dur_min: int, elev_m: int) -> str:
+            if dur_min == 0:
+                return "<span style='color:#3d4448;font-size:0.85em;'>—</span>"
+            h, m = divmod(dur_min, 60)
+            t = f"{h}h{m:02d}" if h > 0 else f"{m}'"
+            e = (f"<br><span style='font-size:0.78em;color:#7d8590;'>+{elev_m}m</span>"
+                 if elev_m > 0 else "")
+            return f"<b>{t}</b>{e}"
 
         if "cal_week_offset" not in st.session_state:
             st.session_state.cal_week_offset = 0
         if "cal_edit_date" not in st.session_state:
             st.session_state.cal_edit_date = None
 
-        _wo = st.session_state.cal_week_offset
-        _today = date.today()
-        _week_start = _today - timedelta(days=_today.weekday()) + timedelta(weeks=_wo)
-        _week_end   = _week_start + timedelta(days=6)
-        _week_dates = [_week_start + timedelta(days=i) for i in range(7)]
-        _week_strs  = [d.isoformat() for d in _week_dates]
+        _wo          = st.session_state.cal_week_offset
+        _today       = date.today()
+        _base_monday = _today - timedelta(days=_today.weekday()) + timedelta(weeks=_wo)
+        _all_dates   = [_base_monday + timedelta(days=i) for i in range(28)]
+        _all_strs    = [d.isoformat() for d in _all_dates]
 
-        # ── Navigation semaine ──
+        # ── Navigation 4 semaines ──
         _nav1, _nav2, _nav3 = st.columns([1, 4, 1])
         with _nav1:
-            if st.button("← Préc.", key="cal_prev"):
-                st.session_state.cal_week_offset -= 1
+            if st.button("← 4 sem.", key="cal_prev"):
+                st.session_state.cal_week_offset -= 4
                 st.rerun()
         with _nav2:
             st.markdown(
                 f"<h3 style='text-align:center;margin:0;'>"
-                f"Semaine du {_week_start.strftime('%d %b')} au {_week_end.strftime('%d %b %Y')}"
+                f"{_base_monday.strftime('%d %b')} — {_all_dates[-1].strftime('%d %b %Y')}"
                 f"</h3>",
                 unsafe_allow_html=True,
             )
         with _nav3:
-            if st.button("Suiv. →", key="cal_next"):
-                st.session_state.cal_week_offset += 1
+            if st.button("4 sem. →", key="cal_next"):
+                st.session_state.cal_week_offset += 4
                 st.rerun()
 
-        st.markdown("")
-
-        # ── Chargement des données de la semaine ──
-        _ph = ",".join("?" * 7)
-        _planned_wk = pd.read_sql_query(
-            f"SELECT * FROM planned_workouts WHERE date IN ({_ph}) ORDER BY date",
-            conn, params=_week_strs,
+        # ── Chargement des données (28 jours) ──
+        _ph28        = ",".join("?" * 28)
+        _planned_all = pd.read_sql_query(
+            f"SELECT * FROM planned_workouts WHERE date IN ({_ph28}) ORDER BY date",
+            conn, params=_all_strs,
         )
-        _actual_wk = pd.read_sql_query(
-            f"SELECT * FROM workouts WHERE date IN ({_ph}) ORDER BY date",
-            conn, params=_week_strs,
+        _actual_all = pd.read_sql_query(
+            f"SELECT * FROM workouts WHERE date IN ({_ph28}) ORDER BY date",
+            conn, params=_all_strs,
         )
 
-        # ── Grille 7 jours ──
-        _day_cols = st.columns(7)
-        for _ci, (_col, _d) in enumerate(zip(_day_cols, _week_dates)):
-            _d_str     = _d.isoformat()
-            _is_today  = (_d == _today)
-            _is_past   = (_d < _today)
-            _plans_d   = _planned_wk[_planned_wk.date == _d_str]
-            _actuals_d = _actual_wk[_actual_wk.date  == _d_str]
+        # ── Layout : 7 colonnes jours + 3 colonnes bilan ──
+        _col_ws = [1.0] * 7 + [0.8, 0.8, 0.8]
 
-            with _col:
-                # En-tête du jour
-                _hdr_color = "#f1c40f" if _is_today else "#aaaaaa"
+        # En-tête
+        _hdr = st.columns(_col_ws)
+        for _i, _dn in enumerate(_DAYS_FR):
+            _hdr[_i].markdown(
+                f"<div style='text-align:center;font-size:0.75em;font-weight:600;"
+                f"color:#7d8590;letter-spacing:1px;text-transform:uppercase;"
+                f"padding-bottom:4px;border-bottom:1px solid #21262d;'>{_dn}</div>",
+                unsafe_allow_html=True,
+            )
+        for _ci, (_lbl, _clr) in enumerate([
+            ("🚴 Vélo", "#3b82f6"),
+            ("🏃 Trail/Cap", "#22c55e"),
+            ("Total", "#a9b1ba"),
+        ]):
+            _hdr[7 + _ci].markdown(
+                f"<div style='text-align:center;font-size:0.72em;font-weight:600;"
+                f"color:{_clr};padding-bottom:4px;border-bottom:1px solid #21262d;'>{_lbl}</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── 4 lignes de semaines ──
+        for _wi in range(4):
+            _wd = [_base_monday + timedelta(days=_wi * 7 + _di) for _di in range(7)]
+            _ws = [d.isoformat() for d in _wd]
+
+            _plan_wk   = _planned_all[_planned_all.date.isin(_ws)]
+            _actual_wk = _actual_all[_actual_all.date.isin(_ws)]
+
+            # Calcul bilans hebdo
+            _vd = _ve = _trld = _trle = _totd = _tote = 0
+            for _, _r in _actual_wk.iterrows():
+                _dur = int(_r.duration_min)
+                _elv = int(_r.elevation_m or 0)
+                _totd += _dur; _tote += _elv
+                if str(_r.type) == "Vélo":
+                    _vd += _dur; _ve += _elv
+                elif str(_r.type) in ("Trail", "Cap", "Athlé"):
+                    _trld += _dur; _trle += _elv
+
+            _row = st.columns(_col_ws)
+
+            for _di, (_d, _d_str) in enumerate(zip(_wd, _ws)):
+                _is_today = (_d == _today)
+                _plans_d  = _plan_wk[_plan_wk.date == _d_str]
+                _acts_d   = _actual_wk[_actual_wk.date == _d_str]
+
+                with _row[_di]:
+                    _hc = "#f1c40f" if _is_today else ("#c9d1d9" if _d >= _today else "#7d8590")
+                    _fw = "700" if _is_today else "500"
+                    st.markdown(
+                        f"<div style='text-align:center;padding-top:4px;'>"
+                        f"<span style='font-size:0.8em;font-weight:{_fw};color:{_hc};'>"
+                        f"{_d.day}</span></div>",
+                        unsafe_allow_html=True,
+                    )
+                    _acts  = [{"type": r.type, "duration_min": int(r.duration_min)}
+                              for _, r in _acts_d.iterrows()]
+                    _plans = [{"sport": r.sport, "duration_min": int(r.duration_min)}
+                              for _, r in _plans_d.iterrows()]
+                    st.markdown(
+                        _circles_html(_acts, _plans) if (_acts or _plans)
+                        else "<div style='height:70px;'></div>",
+                        unsafe_allow_html=True,
+                    )
+                    _btn_lbl = "✏️" if not _plans_d.empty else "➕"
+                    if st.button(_btn_lbl, key=f"cal_btn_{_d_str}",
+                                 use_container_width=True, help=f"Planifier le {_d_str}"):
+                        st.session_state.cal_edit_date = _d_str
+                        st.rerun()
+
+            _sum_style = (
+                "height:70px;display:flex;flex-direction:column;"
+                "justify-content:center;align-items:center;"
+                "font-size:0.82em;text-align:center;"
+            )
+            with _row[7]:
                 st.markdown(
-                    f"<div style='text-align:center;'>"
-                    f"<span style='color:{_hdr_color};font-size:0.8em;font-weight:600;'>{_DAYS_FR[_ci]}</span><br>"
-                    f"<span style='font-size:1.5em;font-weight:700;color:{_hdr_color};'>{_d.day:02d}</span>"
-                    f"</div>",
+                    f"<div style='{_sum_style}color:#3b82f6;'>"
+                    f"{_fmt_wk_summary(_vd, _ve)}</div>",
+                    unsafe_allow_html=True,
+                )
+            with _row[8]:
+                st.markdown(
+                    f"<div style='{_sum_style}color:#22c55e;'>"
+                    f"{_fmt_wk_summary(_trld, _trle)}</div>",
+                    unsafe_allow_html=True,
+                )
+            with _row[9]:
+                st.markdown(
+                    f"<div style='{_sum_style}color:#a9b1ba;'>"
+                    f"{_fmt_wk_summary(_totd, _tote)}</div>",
                     unsafe_allow_html=True,
                 )
 
-                # Session planifiée
-                if not _plans_d.empty:
-                    _p = _plans_d.iloc[0]
-                    _sem = _SPORT_EMOJI.get(_p.sport, "🏃")
-                    _det = [f"{int(_p.duration_min)}'"]
-                    if _p.distance_km:
-                        _det.append(f"{float(_p.distance_km):.1f}km")
-                    if _p.elevation_m:
-                        _det.append(f"+{int(_p.elevation_m)}m")
-                    st.markdown(
-                        f"<div style='background:#1e3a5f;border-radius:6px;padding:5px 7px;"
-                        f"margin:4px 0;font-size:0.78em;'>"
-                        f"🎯 <b>{_sem} {_p.sport}</b><br>"
-                        f"<span style='color:#aad4f5;'>{'  ·  '.join(_det)}</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                # Séances réalisées
-                if not _actuals_d.empty:
-                    for _, _a in _actuals_d.iterrows():
-                        _aem  = _SPORT_EMOJI.get(_a.type, "🏃")
-                        _adet = [f"{int(_a.duration_min)}'"]
-                        _adist = getattr(_a, "distance_km", None)
-                        if _adist and pd.notna(_adist) and float(_adist) > 0:
-                            _adet.append(f"{float(_adist):.1f}km")
-                        if _a.elevation_m:
-                            _adet.append(f"+{int(_a.elevation_m)}m")
-                        _bg = "#1a472a" if not _plans_d.empty else "#2d3748"
-                        st.markdown(
-                            f"<div style='background:{_bg};border-radius:6px;padding:5px 7px;"
-                            f"margin:4px 0;font-size:0.78em;'>"
-                            f"✅ <b>{_aem} {_a.type}</b><br>"
-                            f"<span style='color:#a8e6b4;'>{'  ·  '.join(_adet)}</span>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-                elif not _plans_d.empty and _is_past:
-                    st.markdown(
-                        "<div style='background:#4a1515;border-radius:6px;padding:5px 7px;"
-                        "margin:4px 0;font-size:0.78em;text-align:center;'>"
-                        "⚠️ Manqué"
-                        "</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                # Bouton édition
-                _btn_lbl = "✏️" if not _plans_d.empty else "➕"
-                if st.button(_btn_lbl, key=f"cal_btn_{_d_str}", use_container_width=True,
-                             help=f"Planifier le {_d_str}"):
-                    st.session_state.cal_edit_date = _d_str
-                    st.rerun()
+            st.markdown(
+                "<hr style='margin:3px 0 6px 0;border:none;border-top:1px solid #21262d;'>",
+                unsafe_allow_html=True,
+            )
 
         st.markdown("---")
 
@@ -2586,7 +2650,6 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
             _sorted_wks = sorted(_wks.keys())
             _wk_lbls    = [f"S {_w[5:7]}/{_w[8:10]}" for _w in _sorted_wks]
 
-            # Graphique Durée + D+
             _gc1, _gc2 = st.columns(2)
 
             with _gc1:
@@ -2627,7 +2690,6 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                 )
                 st.plotly_chart(_fig_elev, use_container_width=True)
 
-            # Graphique Distance (si données)
             _has_dist = any(
                 _wks[_w]["plan_dist"] > 0 or _wks[_w]["real_dist"] > 0
                 for _w in _sorted_wks
@@ -2651,7 +2713,6 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                 )
                 st.plotly_chart(_fig_dist, use_container_width=True)
 
-            # Graphique Zones FC planifiées vs réalisées
             _has_plan_z = any(any(_wks[_w]["plan_z"]) for _w in _sorted_wks)
             _has_real_z = any(any(_wks[_w]["real_z"]) for _w in _sorted_wks)
 
