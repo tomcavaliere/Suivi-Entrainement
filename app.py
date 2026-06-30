@@ -659,8 +659,9 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
     with _hcol2:
         selected_date = st.date_input("📅 Date", date.today(), label_visibility="collapsed")
     sel_str = selected_date.isoformat()
-    tab_vue, tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar = st.tabs(
-        ["⚡ Vue d'ensemble", "🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme", "📈 Performance", "📅 Calendrier"]
+    tab_vue, tab_nutri, tab_training, tab_forme, tab_perf, tab_calendar, tab_doc = st.tabs(
+        ["⚡ Vue d'ensemble", "🍽️ Nutrition", "🏃 Entraînement", "🫀 Forme",
+         "📈 Performance", "📅 Calendrier", "📖 Documentation"]
     )
 
     # ═══════════════════ TAB 0 : VUE D'ENSEMBLE ═══════════════════
@@ -2721,6 +2722,14 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                             legend=dict(orientation="h", y=-0.35, font=dict(size=10)),
                         )
                         st.plotly_chart(_fig_zr, use_container_width=True)
+
+    # ═══════════════════ TAB 6 : DOCUMENTATION ═══════════════════
+    with tab_doc:
+        _doc_path = Path(__file__).parent / "documentation_app.md"
+        if _doc_path.exists():
+            st.markdown(_doc_path.read_text(encoding="utf-8"))
+        else:
+            st.warning("Fichier documentation_app.md introuvable.")
 
     conn.close()
 
