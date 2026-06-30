@@ -2261,21 +2261,23 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                             name="sRPE", marker_color="#f0883e",
                         ))
                     if _has_trimp_30:
-                        fig_st30.add_trace(go.Bar(
+                        fig_st30.add_trace(go.Scatter(
                             x=_sess_30["label"], y=_sess_30["trimp"],
-                            name="TRIMP", marker_color="#39c5cf",
+                            name="TRIMP", mode="lines+markers",
+                            line=dict(color="#39c5cf", width=2),
+                            marker=dict(size=6),
                             yaxis="y2",
                         ))
                     _extra_layout = {}
                     if _has_trimp_30:
                         _extra_layout["yaxis2"] = dict(
-                            title="TRIMP", overlaying="y", side="right", showgrid=False,
+                            title="TRIMP", overlaying="y", side="right",
+                            showgrid=False, rangemode="tozero",
                         )
                     fig_st30.update_layout(
                         height=300,
                         title="sRPE & TRIMP par séance — 30 jours",
-                        barmode="group",
-                        yaxis=dict(title="sRPE"),
+                        yaxis=dict(title="sRPE", rangemode="tozero"),
                         legend=dict(orientation="h", y=-0.3),
                         margin=dict(t=40, b=20, l=40, r=10),
                         xaxis=dict(tickangle=-45),
