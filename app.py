@@ -1141,10 +1141,21 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
 
                 st.markdown("---")
 
-        # ── Repas favoris : chargement rapide ──
+        # ── Repas : actions ──
         _saved_meals_df = pd.read_sql_query("SELECT * FROM saved_meals ORDER BY name", conn)
-        if not _saved_meals_df.empty:
-            with st.expander("📚 Charger un repas favori"):
+
+        tab_add, tab_load, tab_scan, tab_favs, tab_saved = st.tabs([
+            "➕ Ajouter un repas",
+            "📚 Charger un repas favori",
+            "📷 Scanner une étiquette",
+            "📋 Gérer les favoris",
+            "📚 Gérer les repas favoris",
+        ])
+
+        with tab_load:
+            if _saved_meals_df.empty:
+                st.info("Aucun repas favori sauvegardé. Utilise le bouton ⭐ dans un repas existant.")
+            else:
                 _sm_choice = st.selectbox(
                     "Repas favori", _saved_meals_df["name"].tolist(), key="sm_choice"
                 )
@@ -1189,133 +1200,130 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                         conn.commit()
                         st.rerun()
 
-        # ── Add a meal ──
-        st.subheader("➕ Ajouter un repas")
-
-        add_c1, add_c2 = st.columns(2)
-        pending_type = add_c1.selectbox("Type de repas", MEAL_TYPES, key="pending_type")
-        pending_time = add_c2.time_input(
-            "Heure", value=MEAL_DEFAULT_TIME.get(pending_type, time(12, 0)),
-            key="pending_time",
-        )
-        pending_time_str = pending_time.strftime("%H:%M")
-
-        # Pending foods preview
-        if st.session_state.pending_foods:
-            st.markdown("**Aliments en cours d'ajout :**")
-            h1, h2, h3, h4, h5, h6, _ = st.columns([3, 1.2, 1, 1, 1, 1, 0.6])
-            for col, label in zip(
-                [h1, h2, h3, h4, h5, h6],
-                ["Aliment", "Qté (g)", "Gluc", "Prot", "Lip", "Kcal"],
-            ):
-                col.markdown(f"<small><b>{label}</b></small>", unsafe_allow_html=True)
-
-            to_delete = None
-            for i, food in enumerate(st.session_state.pending_foods):
-                c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 1.2, 1, 1, 1, 1, 0.6])
-                c1.write(food["food_name"])
-                c2.write(f"{food['quantity_g']:.0f}g")
-                c3.write(f"{food['carbs_g']:.1f}")
-                c4.write(f"{food['protein_g']:.1f}")
-                c5.write(f"{food['fat_g']:.1f}")
-                c6.write(f"{food['kcal']:.0f}")
-                if c7.button("❌", key=f"del_pending_{i}"):
-                    to_delete = i
-            if to_delete is not None:
-                st.session_state.pending_foods.pop(to_delete)
-                st.rerun()
-
-            pend_df = pd.DataFrame(st.session_state.pending_foods)
-            st.markdown(
-                f"**Total : {pend_df.kcal.sum():.0f} kcal** — "
-                f"G {pend_df.carbs_g.sum():.0f}g · "
-                f"P {pend_df.protein_g.sum():.0f}g · "
-                f"L {pend_df.fat_g.sum():.0f}g"
+        with tab_add:
+            add_c1, add_c2 = st.columns(2)
+            pending_type = add_c1.selectbox("Type de repas", MEAL_TYPES, key="pending_type")
+            pending_time = add_c2.time_input(
+                "Heure", value=MEAL_DEFAULT_TIME.get(pending_type, time(12, 0)),
+                key="pending_time",
             )
-            btn_save, btn_clear = st.columns(2)
-            if btn_save.button("✅ Enregistrer le repas", type="primary"):
-                for food in st.session_state.pending_foods:
-                    conn.execute(
-                        """INSERT INTO meals
-                           (date, meal_type, meal_time, food_name,
-                            quantity_g, carbs_g, protein_g, fat_g, kcal)
-                           VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (sel_str, pending_type, pending_time_str,
-                         food["food_name"], food["quantity_g"],
-                         food["carbs_g"], food["protein_g"],
-                         food["fat_g"], food["kcal"]),
-                    )
-                conn.commit()
-                st.session_state.pending_foods = []
-                st.rerun()
-            if btn_clear.button("🗑️ Vider la liste"):
-                st.session_state.pending_foods = []
-                st.rerun()
+            pending_time_str = pending_time.strftime("%H:%M")
 
-        # Food selectors
-        st.markdown("**Ajouter des aliments :**")
-        food_c1, food_c2 = st.columns(2)
+            # Pending foods preview
+            if st.session_state.pending_foods:
+                st.markdown("**Aliments en cours d'ajout :**")
+                h1, h2, h3, h4, h5, h6, _ = st.columns([3, 1.2, 1, 1, 1, 1, 0.6])
+                for col, label in zip(
+                    [h1, h2, h3, h4, h5, h6],
+                    ["Aliment", "Qté (g)", "Gluc", "Prot", "Lip", "Kcal"],
+                ):
+                    col.markdown(f"<small><b>{label}</b></small>", unsafe_allow_html=True)
 
-        with food_c1:
-            st.markdown("**Depuis les favoris**")
-            fav_choice = st.selectbox("Aliment", favs["name"].tolist(), key="fav_sel")
-            fav_row = favs[favs["name"] == fav_choice].iloc[0]
-            _has_portion = (
-                "portion_g" in favs.columns
-                and fav_row.get("portion_g") is not None
-                and not pd.isna(fav_row.get("portion_g", float("nan")))
-            )
-            if _has_portion:
-                _portion_g = float(fav_row["portion_g"])
-                _unit = st.radio(
-                    "Unité",
-                    ["Grammes", f"Portions ({_portion_g:.0f} g/portion)"],
-                    horizontal=True,
-                    key="fav_unit",
+                to_delete = None
+                for i, food in enumerate(st.session_state.pending_foods):
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 1.2, 1, 1, 1, 1, 0.6])
+                    c1.write(food["food_name"])
+                    c2.write(f"{food['quantity_g']:.0f}g")
+                    c3.write(f"{food['carbs_g']:.1f}")
+                    c4.write(f"{food['protein_g']:.1f}")
+                    c5.write(f"{food['fat_g']:.1f}")
+                    c6.write(f"{food['kcal']:.0f}")
+                    if c7.button("❌", key=f"del_pending_{i}"):
+                        to_delete = i
+                if to_delete is not None:
+                    st.session_state.pending_foods.pop(to_delete)
+                    st.rerun()
+
+                pend_df = pd.DataFrame(st.session_state.pending_foods)
+                st.markdown(
+                    f"**Total : {pend_df.kcal.sum():.0f} kcal** — "
+                    f"G {pend_df.carbs_g.sum():.0f}g · "
+                    f"P {pend_df.protein_g.sum():.0f}g · "
+                    f"L {pend_df.fat_g.sum():.0f}g"
                 )
-                if _unit == "Grammes":
-                    fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
-                else:
-                    _nb = st.number_input("Nombre de portions", 0.25, 20.0, 1.0, 0.25, key="fav_nb")
-                    fav_qty_g = _nb * _portion_g
-                    st.caption(f"= {fav_qty_g:.0f} g")
-            else:
-                fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
-            if st.button("➕ Ajouter au repas", key="fav_add"):
-                r = fav_qty_g / 100
-                st.session_state.pending_foods.append({
-                    "food_name": fav_choice,
-                    "quantity_g": fav_qty_g,
-                    "carbs_g":   round(fav_row.carbs_per_100   * r, 1),
-                    "protein_g": round(fav_row.protein_per_100 * r, 1),
-                    "fat_g":     round(fav_row.fat_per_100     * r, 1),
-                    "kcal":      round(fav_row.kcal_per_100    * r),
-                })
-                st.rerun()
+                btn_save, btn_clear = st.columns(2)
+                if btn_save.button("✅ Enregistrer le repas", type="primary"):
+                    for food in st.session_state.pending_foods:
+                        conn.execute(
+                            """INSERT INTO meals
+                               (date, meal_type, meal_time, food_name,
+                                quantity_g, carbs_g, protein_g, fat_g, kcal)
+                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                            (sel_str, pending_type, pending_time_str,
+                             food["food_name"], food["quantity_g"],
+                             food["carbs_g"], food["protein_g"],
+                             food["fat_g"], food["kcal"]),
+                        )
+                    conn.commit()
+                    st.session_state.pending_foods = []
+                    st.rerun()
+                if btn_clear.button("🗑️ Vider la liste"):
+                    st.session_state.pending_foods = []
+                    st.rerun()
 
-        with food_c2:
-            st.markdown("**Saisie libre**")
-            m_name = st.text_input("Nom", key="m_name")
-            m_qty  = st.number_input("Quantité (g)", 1, 2000, 100, key="m_qty")
-            mc1, mc2 = st.columns(2)
-            m_carbs = mc1.number_input("Glucides (g)", 0.0, 500.0, 0.0, 0.5, key="m_carbs")
-            m_prot  = mc2.number_input("Protéines (g)", 0.0, 500.0, 0.0, 0.5, key="m_prot")
-            m_fat   = mc1.number_input("Lipides (g)",  0.0, 500.0, 0.0, 0.5, key="m_fat")
-            m_kcal  = mc2.number_input("Kcal",         0.0, 5000.0, 0.0, 1.0, key="m_kcal")
-            if st.button("➕ Ajouter au repas", key="manual_add"):
-                if m_name:
+            # Food selectors
+            st.markdown("**Ajouter des aliments :**")
+            food_c1, food_c2 = st.columns(2)
+
+            with food_c1:
+                st.markdown("**Depuis les favoris**")
+                fav_choice = st.selectbox("Aliment", favs["name"].tolist(), key="fav_sel")
+                fav_row = favs[favs["name"] == fav_choice].iloc[0]
+                _has_portion = (
+                    "portion_g" in favs.columns
+                    and fav_row.get("portion_g") is not None
+                    and not pd.isna(fav_row.get("portion_g", float("nan")))
+                )
+                if _has_portion:
+                    _portion_g = float(fav_row["portion_g"])
+                    _unit = st.radio(
+                        "Unité",
+                        ["Grammes", f"Portions ({_portion_g:.0f} g/portion)"],
+                        horizontal=True,
+                        key="fav_unit",
+                    )
+                    if _unit == "Grammes":
+                        fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
+                    else:
+                        _nb = st.number_input("Nombre de portions", 0.25, 20.0, 1.0, 0.25, key="fav_nb")
+                        fav_qty_g = _nb * _portion_g
+                        st.caption(f"= {fav_qty_g:.0f} g")
+                else:
+                    fav_qty_g = float(st.number_input("Quantité (g)", 10, 2000, 100, 10, key="fav_qty"))
+                if st.button("➕ Ajouter au repas", key="fav_add"):
+                    r = fav_qty_g / 100
                     st.session_state.pending_foods.append({
-                        "food_name": m_name,
-                        "quantity_g": m_qty,
-                        "carbs_g":   m_carbs,
-                        "protein_g": m_prot,
-                        "fat_g":     m_fat,
-                        "kcal":      m_kcal,
+                        "food_name": fav_choice,
+                        "quantity_g": fav_qty_g,
+                        "carbs_g":   round(fav_row.carbs_per_100   * r, 1),
+                        "protein_g": round(fav_row.protein_per_100 * r, 1),
+                        "fat_g":     round(fav_row.fat_per_100     * r, 1),
+                        "kcal":      round(fav_row.kcal_per_100    * r),
                     })
                     st.rerun()
 
-        # Label scanner
-        with st.expander("📷 Scanner une étiquette nutritionnelle"):
+            with food_c2:
+                st.markdown("**Saisie libre**")
+                m_name = st.text_input("Nom", key="m_name")
+                m_qty  = st.number_input("Quantité (g)", 1, 2000, 100, key="m_qty")
+                mc1, mc2 = st.columns(2)
+                m_carbs = mc1.number_input("Glucides (g)", 0.0, 500.0, 0.0, 0.5, key="m_carbs")
+                m_prot  = mc2.number_input("Protéines (g)", 0.0, 500.0, 0.0, 0.5, key="m_prot")
+                m_fat   = mc1.number_input("Lipides (g)",  0.0, 500.0, 0.0, 0.5, key="m_fat")
+                m_kcal  = mc2.number_input("Kcal",         0.0, 5000.0, 0.0, 1.0, key="m_kcal")
+                if st.button("➕ Ajouter au repas", key="manual_add"):
+                    if m_name:
+                        st.session_state.pending_foods.append({
+                            "food_name": m_name,
+                            "quantity_g": m_qty,
+                            "carbs_g":   m_carbs,
+                            "protein_g": m_prot,
+                            "fat_g":     m_fat,
+                            "kcal":      m_kcal,
+                        })
+                        st.rerun()
+
+        with tab_scan:
             if not OCR_AVAILABLE:
                 st.warning(
                     "Aucun moteur OCR disponible. "
@@ -1389,8 +1397,7 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                             st.session_state.scan_raw_text = None
                             st.rerun()
 
-        # Favorites manager
-        with st.expander("📋 Gérer les favoris"):
+        with tab_favs:
             _favs_disp = favs[["name", "carbs_per_100", "protein_per_100",
                                 "fat_per_100", "kcal_per_100"]].copy()
             _favs_disp.columns = ["Aliment", "G/100g", "P/100g", "L/100g", "Kcal/100g"]
@@ -1443,7 +1450,7 @@ html, body, [class*="css"], .stMarkdown, button, label, select, textarea, input 
                     conn.commit()
                     st.rerun()
 
-        with st.expander("📚 Gérer les repas favoris"):
+        with tab_saved:
             _all_sm = pd.read_sql_query("SELECT * FROM saved_meals ORDER BY name", conn)
             if _all_sm.empty:
                 st.info("Aucun repas favori sauvegardé. Utilise le bouton ⭐ dans un repas existant.")
