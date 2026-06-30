@@ -21,38 +21,159 @@
 
 ## 1.1 Les zones d'intensité
 
-L'intensité d'un effort se découpe en zones délimitées par deux **seuils physiologiques** :
+L'intensité d'un effort se découpe en zones délimitées par deux **seuils physiologiques**. Tout le pilotage de l'entraînement repose sur eux — bien plus que sur les %FCmax, car deux athlètes de même FCmax peuvent avoir des seuils très différents selon leur niveau.
 
-| Seuil | Synonymes | Signification physiologique |
-|-------|-----------|----------------------------|
-| **SV1** (seuil ventilatoire 1) | Seuil aérobie, LT1 | Première rupture de linéarité de la ventilation. En dessous, l'effort est quasi 100 % aérobie, le lactate reste à son niveau de base (~2 mmol/L). |
-| **SV2** (seuil ventilatoire 2) | Seuil anaérobie, LT2, MLSS | Point au-delà duquel le lactate s'accumule plus vite qu'il n'est éliminé. C'est la plus haute intensité tenable en quasi-équilibre (~30-60 min selon le niveau). |
+### SV1 — le seuil aérobie (≈ LT1)
 
-Ces seuils sont **bien plus pertinents que les %FCmax** pour piloter l'entraînement : deux athlètes avec la même FCmax peuvent avoir des seuils très différents selon leur niveau.
+*Synonymes : premier seuil ventilatoire, seuil aérobie, LT1.*
 
-### Le modèle 3 zones (recommandé)
+C'est la **première** rupture de linéarité de la ventilation à l'effort croissant. En dessous, l'effort est quasi **100 % aérobie** : le lactate reste à son niveau de repos (~1-2 mmol/L), entièrement recyclé au fil de sa production. On peut tenir des **heures** à cette intensité.
+
+Repère subjectif : c'est la limite haute du « confortable », où l'on peut encore **parler en phrases complètes**. C'est la frontière du véritable travail d'endurance fondamentale.
+
+### SV2 — le seuil anaérobie (≈ LT2 / MLSS)
+
+*Synonymes : second seuil ventilatoire, seuil anaérobie, LT2, proche du MLSS.*
+
+C'est le point au-delà duquel le lactate **s'accumule plus vite qu'il n'est éliminé** : l'équilibre bascule. C'est la **plus haute intensité tenable en quasi-équilibre métabolique** — soutenable ~**30 à 60 min** selon le niveau (proche de l'allure semi-marathon à marathon pour un coureur entraîné).
+
+Repère subjectif : on ne parle plus que par **mots isolés**. Au-dessus, l'horloge tourne vite.
+
+> Ces deux seuils découpent trois grands **régimes métaboliques** : sous SV1 (aérobie pur), entre SV1 et SV2 (zone de transition), au-dessus de SV2 (accumulation lactique). Le modèle 5 zones ci-dessous subdivise ces régimes pour un pilotage plus fin.
+
+### Le modèle 5 zones (ancré sur SV1 / SV2)
+
+| Zone | Bornes (vs seuils) | Lactate | RPE /10 | Durée tenable | Filière & adaptation visée |
+|------|--------------------|---------|---------|---------------|----------------------------|
+| **Z1 — Récupération** | nettement < SV1 | base | 1-2 | illimitée | Récup active, drainage. Aucune contrainte. |
+| **Z2 — Endurance fondamentale** | jusqu'à SV1 | base (~1-2) | 3-4 | plusieurs heures | **Base aérobie** : densité mitochondriale, capillarisation, oxydation des lipides, volume d'éjection cardiaque. *Le cœur du volume.* |
+| **Z3 — Tempo / allure spécifique** | SV1 — juste sous SV2 | léger (~2-3) | 5-6 | 1-3 h | Endurance « tempo », allure marathon/ultra. Économie, soutien de l'allure aérobie. |
+| **Z4 — Seuil** | autour de SV2 | (~3-4+) | 7-8 | 30-60 min | **Élève le SV2/MLSS** et la clairance du lactate. L'un des meilleurs ROI en endurance. |
+| **Z5 — VO2max / anaérobie** | > SV2 | élevé, croissant | 9-10 | quelques min | Plafond aérobie (**VO2max**), puissance, capacité anaérobie. Doses courtes. |
+
+### Exemple chiffré — tes propres repères
+
+Avec tes valeurs (test 2024 : **SV1 = 175**, **SV2 = 185**, **FCmax = 205**, FC repos ~52) :
 
 ```
-Zone 1  → < SV1        → Endurance fondamentale, "facile"
-Zone 2  → SV1 – SV2    → Tempo / seuil, "moyennement dur"
-Zone 3  → > SV2        → Haute intensité, VO2max et au-delà
+Z1 Récupération        : < ~160 bpm
+Z2 Endurance fond.     : ~160 – 175 bpm   (plafond = SV1)
+Z3 Tempo               : ~175 – 183 bpm
+Z4 Seuil               : ~183 – 188 bpm   (autour de SV2)
+Z5 VO2max / anaérobie  : > ~188 bpm       (jusqu'à 205)
 ```
 
-C'est le modèle physiologiquement le plus propre : chaque zone correspond à un régime métabolique distinct. Le modèle 5 zones (souvent utilisé par les montres) subdivise ces régions mais introduit des frontières plus arbitraires.
+Remarque : tes deux seuils sont **rapprochés (10 bpm)**, donc tes zones Z3-Z4-Z5 sont étroites. C'est individuel et normal — raison de plus pour piloter au seuil, pas au %FCmax. À revalider régulièrement (voir [1.2](#12-évaluer-ses-repères--fcmax-seuils-vo2max)).
 
-### Pourquoi la zone 1 domine
+### Distribution de l'intensité : combien dans chaque zone ?
 
-L'erreur classique de l'amateur est de passer trop de temps en zone 2 ("no man's land") : assez dur pour fatiguer, pas assez pour maximiser l'adaptation aérobie ou la puissance.
+L'erreur classique de l'amateur est de vivre en **Z3** (« no man's land ») : assez dur pour fatiguer, pas assez pour maximiser ni la base aérobie ni la puissance.
 
-**⚠️ Débattu — distribution polarisée vs pyramidale.**
-- **Modèle polarisé (Seiler)** : ~80 % du *volume* en zone 1, ~20 % en zone 3, très peu en zone 2. Soutenu par l'observation des athlètes d'élite en endurance.
-- **Modèle pyramidal** : majorité en zone 1, une part décroissante en zone 2 puis zone 3. Certaines études le trouvent aussi efficace, surtout en phase de préparation spécifique.
+**⚠️ Débattu — polarisé vs pyramidal.** En regroupant les 5 zones en 3 régimes (bas = Z1-Z2, intermédiaire = Z3, haut = Z4-Z5) :
+- **Modèle polarisé (Seiler)** : ~80 % du *volume* en bas (Z1-Z2), ~20 % en haut (Z4-Z5), **très peu** d'intermédiaire (Z3). Observé chez beaucoup d'athlètes d'élite.
+- **Modèle pyramidal** : majorité en bas, part décroissante d'intermédiaire puis de haut. Aussi efficace selon certaines études, surtout en phase spécifique.
 
-En pratique pour l'ultra-trail, la base reste la même : **la grande majorité du volume doit être facile**, l'intensité étant une dose concentrée et minoritaire. Le débat porte sur les 20 % restants, pas sur le principe.
+Pour l'ultra-trail, le principe est constant : **la grande majorité du volume reste facile (Z1-Z2)**, l'intensité étant une dose concentrée et minoritaire. Le débat porte sur la place de la Z3, pas sur le socle.
 
 ---
 
-## 1.2 Quantifier la charge d'une séance
+## 1.2 Évaluer ses repères : FCmax, seuils, VO2max
+
+Les zones ne valent que si leurs ancrages sont justes. Voici comment déterminer chaque repère, du plus accessible au gold standard.
+
+### Fréquence cardiaque maximale (FCmax)
+
+**À retenir d'emblée :** la FCmax est **largement génétique**, ne s'améliore **pas** à l'entraînement, et décline lentement avec l'âge. C'est un plafond individuel, pas un objectif.
+
+- **Formules théoriques** — `220 − âge` ou Tanaka `208 − 0.7 × âge`. **⚠️ Très imprécises** (écart-type ~10-12 bpm). Bon point de départ grossier, rien de plus.
+- **Test terrain (fiable)** — après échauffement complet : effort progressif jusqu'à épuisement, typiquement une **série de montées dures** ou un **2-3 km en accélération finale maximale**. La FCmax = la valeur la plus haute jamais observée en effort maximal ou en compétition (fin de 5 km, côtes répétées à fond).
+- Ta valeur : **205 bpm**. Si elle vient d'un vrai effort maximal, garde-la ; les formules te donneraient ~190, ce qui sous-estimerait tes zones hautes.
+
+### Seuils SV1 / SV2 (le plus important)
+
+| Méthode | Cible | Principe | Précision |
+|---------|-------|----------|-----------|
+| **Test labo** | SV1 **et** SV2 | Test incrémental avec analyse des **gaz expirés** (seuils ventilatoires) ou prises de **lactate** sanguin (seuils lactiques). | Gold standard (c'est ton test 2024) |
+| **Talk test** | SV1 | La plus haute intensité où tu parles encore en **phrases complètes**. | Bon, gratuit |
+| **Test 30 min (Friel)** | SV2 (LTHR) | Contre-la-montre solo de 30 min à fond ; la **FC moyenne des 20 dernières min** — FC au seuil. | Bon terrain |
+| **CLM 20 min** | SV2 | FC/puissance moyenne à ~0.95 (logique « FTP »). | Bon terrain |
+| **DFA alpha-1** | SV1 **et** SV2 | Analyse de la **variabilité RR** pendant un effort progressif (detrended fluctuation analysis). α1 ≈ **0.75 → SV1**, α1 ≈ **0.5 → SV2**. | ⚠️ Émergent |
+
+**Focus DFA α1 — pertinent pour toi.** Cette méthode estime les **deux seuils sur le terrain** à partir des seuls intervalles RR, sans labo ni lactate. Elle exige une captation RR **propre** — ta **Polar H10 est idéale** (bien meilleure qu'un capteur optique au poignet). Outils : Runalyze, AI Endurance, FatMaxxer. **⚠️ Encore en validation** : sensible aux artefacts et aux conditions de mesure. À utiliser en **recoupant** avec tes ancrages connus (test labo, talk test), pas en aveugle.
+
+### VO2max
+
+- **Test labo** — mesure directe de la consommation d'oxygène lors d'un test incrémental maximal. Gold standard.
+- **Estimations terrain** — test de Cooper (distance sur 12 min → formule), **prédiction par une perf** (ex. VDOT de Daniels à partir d'un temps de course), **vVO2max** (vitesse à VO2max) via test de terrain, ou estimation des montres (rapport FC/allure — **⚠️ approximatif**).
+
+**⚠️ Ne survalorise pas le VO2max.** C'est un **plafond**, mais la performance en endurance dépend surtout de **deux autres facteurs** : la **fraction de VO2max soutenable** au seuil (utilisation fractionnaire) et l'**économie de course** (coût énergétique à allure donnée). Deux athlètes de même VO2max peuvent être très inégaux en course. Pour l'ultra, économie et seuil priment.
+
+### À quelle fréquence retester ?
+
+- **Seuils & VO2max** : ils **évoluent avec la forme** — retest toutes les **6-12 semaines** ou à chaque changement de bloc. Des zones calées sur de vieux seuils faussent tout le pilotage.
+- **FCmax** : stable — rarement besoin de retester (hors progression de l'âge).
+
+---
+
+## 1.3 Les séances types par qualité développée
+
+Chaque qualité physiologique se travaille par un type de séance et une zone dédiés. Voici la boîte à outils, de la base au plus spécifique.
+
+### 1 — Endurance fondamentale (Z1-Z2)
+
+- **Objectif :** densité mitochondriale, capillarisation, oxydation des lipides, volume cardiaque. **Le socle de tout.**
+- **Formats :** sorties longues continues (LSD, *long slow distance*), footings faciles. Durée de 45 min à plusieurs heures.
+- **Placement :** la majorité du volume hebdomadaire. En ultra, la **sortie longue** est la séance reine (progresser la durée avant l'intensité).
+- **Piège :** courir trop vite. Si tu ne peux pas tenir une conversation, tu es trop haut.
+
+### 2 — Endurance active / tempo (Z3)
+
+- **Objectif :** soutenir l'allure aérobie, économie, allure spécifique marathon/ultra.
+- **Formats :** tempo continu de 20-40 min ; blocs d'allure spécifique au sein d'une sortie longue (ex. derniers 30-45 min en Z3).
+- **Placement :** en phase spécifique surtout. À doser — c'est la zone qu'on **limite** en approche polarisée.
+
+### 3 — Seuil (Z4) — fort ROI
+
+- **Objectif :** **élever le SV2/MLSS** et la clairance du lactate. L'une des séances les plus rentables en endurance.
+- **Formats :**
+  - **Intervalles au seuil** : `3 × 10 min` ou `4 × 8 min` autour de SV2, récup 2-3 min.
+  - **« Cruise intervals »** : fractions de 5-8 min répétées.
+  - **Seuil continu** : 20-30 min à SV2 (plus exigeant mentalement).
+- **Placement :** 1 séance/semaine en phase de développement. Toujours sur jambes fraîches.
+
+### 4 — VO2max / PMA (Z5)
+
+- **Objectif :** repousser le **plafond aérobie**, la puissance aérobie maximale.
+- **Formats :**
+  - **Intervalles longs** : `5 × 3 min` ou `4 × 4 min` à ~95-100 % VO2max, récup ~égale au temps d'effort.
+  - **Intervalles courts** : `30/30`, `40/20` (30 s dur / 30 s facile), efficaces pour accumuler du temps à haute intensité.
+  - **Côtes** : répétitions de 2-4 min en montée raide (combine VO2max et force).
+- **Placement :** 1 séance/semaine max en phase d'affûtage de la puissance. Très coûteuse en récupération.
+
+### 5 — Vitesse & puissance neuromusculaire (> Z5)
+
+- **Objectif :** recrutement neuromusculaire, **économie de course**, capacité anaérobie (W'), raideur musculo-tendineuse. *Pas* l'aérobie.
+- **Formats :**
+  - **Lignes droites (strides)** : 6-8 × 15-20 s en accélération fluide, récup complète. Excellent travail d'économie, peu fatigant — à glisser en fin de footing facile.
+  - **Sprints courts** : 10-15 × 10-30 s à fond, récup longue.
+  - **Sprints en côte** : 8-12 × 10-15 s en montée raide — force + puissance, faible impact.
+- **Placement :** les strides peuvent être quasi quotidiens (entretien). Les sprints durs, 1 fois/semaine.
+
+### 6 — Spécifique trail : côtes & descentes
+
+- **Objectif :** force spécifique en montée, **tolérance excentrique** en descente (le vrai facteur limitant en ultra-trail : les dégâts musculaires des descentes).
+- **Formats :**
+  - **Montée :** répétitions de dénivelé (ex. `5-8 × 3 min` de grimpe), ou « vert » continu (D+ accumulé en Z2-Z3).
+  - **Descente :** descentes techniques **progressivement** intégrées — le muscle s'habitue à la charge excentrique sur des semaines. À doser : très traumatisant, courbatures durables (DOMS).
+- **Placement :** spécifique à ton objectif. La **résistance à la descente se construit lentement** — commencer tôt dans la prépa.
+
+### Comment enchaîner ces séances ?
+
+Une logique de **périodisation** classique : poser d'abord la **base** (volume Z1-Z2 + strides), puis ajouter le **seuil** (Z4), puis la **puissance** (Z5) et le **spécifique** (côtes/descentes) en se rapprochant de l'objectif, avant un **affûtage** (volume réduit, intensité maintenue) — c'est la phase où la TSB remonte (voir [1.5](#15-modéliser-fitness-et-fatigue--ctl--atl--tsb)). Règle d'or transversale : **une seule qualité dure à la fois par séance**, et jamais deux séances dures sans récupération entre elles (voir Monotonie, [1.6](#16-monotonie--strain)).
+
+---
+
+## 1.4 Quantifier la charge d'une séance
 
 Une "charge d'entraînement" cherche à résumer en un nombre le stress imposé à l'organisme. Deux familles : basées sur la perception (sRPE) ou sur la fréquence cardiaque (TRIMP).
 
@@ -98,13 +219,14 @@ Concrètement : 10 min à 95 % "pèsent" autant que beaucoup plus de minutes fac
 
 ```
 TRIMP_zones = (min_Z1 × 1) + (min_Z2 × 2) + (min_Z3 × 3)
+            + (min_Z4 × 4) + (min_Z5 × 5)
 ```
 
-Chaque minute en zone N vaut N points. Plus grossier que la version exponentielle, mais immédiat si les minutes par zone sont déjà connues. Bon compromis pour un suivi quotidien.
+Chaque minute en zone N vaut N points. Plus grossier que la version exponentielle, mais immédiat puisque tes minutes par zone (`hr_z1_min` … `hr_z5_min`) sont déjà stockées. Bon compromis pour un suivi quotidien.
 
 ---
 
-## 1.3 Modéliser fitness et fatigue : CTL / ATL / TSB
+## 1.5 Modéliser fitness et fatigue : CTL / ATL / TSB
 
 On passe de la charge d'*une* séance à la dynamique sur des *semaines*. Le modèle (Banister, popularisé par TrainingPeaks) repose sur une idée : **chaque entraînement produit à la fois de la forme et de la fatigue, mais elles ne disparaissent pas au même rythme.**
 
@@ -142,7 +264,7 @@ TSB (fraîcheur) = CTL − ATL
 
 ---
 
-## 1.4 Monotonie & Strain
+## 1.6 Monotonie & Strain
 
 Deux séances de même charge totale n'ont pas le même impact selon leur *répartition*. Foster a formalisé ça :
 
@@ -269,7 +391,6 @@ La fiabilité de tout le suivi dépend de la **standardisation**. Les règles :
 - PNS Index en chute marquée
 - SNS Index qui passe positif
 - FC repos > +5 bpm
-
 → Plusieurs signaux concordants sur 2-3 jours = réduire la charge.
 
 ---
@@ -325,11 +446,216 @@ Pour l'athlète d'endurance : **1.4 – 2.0 g/kg/jour** (au-dessus des 0.8 g/kg 
 
 ### Lipides — le reste
 
-Complètent l'apport énergétique une fois glucides et protéines fixés. Plancher de ~1 g/kg/jour (≈ 20 % de l'énergie minimum) pour la fonction hormonale et l'absorption des vitamines liposolubles. Important hors séance ; on les réduit autour des efforts pour ne pas gêner la digestion.
+Complètent l'apport énergétique une fois glucides et protéines fixés. Plancher de ~1 g/kg/jour (≈ 20 % de l'énergie minimum) pour la fonction hormonale et l'absorption des vitamines liposolubles. Important hors séance ; on les réduit autour des efforts pour ne pas gêner la digestion. La *qualité* des lipides (profil en acides gras) est détaillée en [3.4](#34-les-acides-gras-essentiels--oméga-3--oméga-6).
 
 ---
 
-## 3.3 Périodisation glucidique
+## 3.3 Les acides aminés
+
+Les protéines sont des chaînes de 20 acides aminés. Au-delà de la quantité (g/kg vue en 3.2), c'est leur **composition** qui détermine la qualité d'une source protéique et sa capacité à déclencher l'adaptation.
+
+### Essentiels, non-essentiels, conditionnellement essentiels
+
+```
+ESSENTIELS (9) — l'organisme ne peut PAS les synthétiser, apport alimentaire obligatoire
+  Histidine, Isoleucine, Leucine, Lysine, Méthionine,
+  Phénylalanine, Thréonine, Tryptophane, Valine
+
+NON-ESSENTIELS — synthétisables à partir d'autres composés
+
+CONDITIONNELLEMENT ESSENTIELS — deviennent indispensables sous stress
+  (maladie, effort intense prolongé) : glutamine, arginine, glycine...
+```
+
+Les **9 essentiels (EAA)** sont le facteur limitant : c'est leur disponibilité, et non l'azote total, qui pilote la synthèse protéique musculaire (MPS).
+
+### La leucine — le déclencheur
+
+Parmi les EAA, la **leucine** joue un rôle de signal : elle active la voie **mTOR**, principal interrupteur de la synthèse protéique. D'où la notion de **seuil leucine** (~2-3 g par prise) à atteindre pour "allumer" pleinement la MPS.
+
+C'est aussi pourquoi **toutes les protéines ne se valent pas** :
+
+| Source | Qualité (profil EAA + digestibilité) |
+|--------|--------------------------------------|
+| Animales (œuf, lait, viande, poisson) | Complètes, riches en leucine, hautement digestibles |
+| Végétales isolées (sauf soja) | Souvent déficitaires en 1+ EAA (ex : lysine dans les céréales, méthionine dans les légumineuses) |
+
+→ Une alimentation végétale doit **combiner** les sources (céréales + légumineuses) et viser un apport total un peu plus élevé pour compenser une teneur en leucine et une digestibilité moindres. C'est la notion de **complémentarité protéique**.
+
+### Les BCAA (acides aminés à chaîne ramifiée)
+
+**Leucine, isoleucine, valine.** Particularité : métabolisés directement dans le **muscle** (et non le foie), ils peuvent servir de substrat énergétique lors d'efforts prolongés qui épuisent le glycogène.
+
+**⚠️ Débattu — l'hypothèse de la "fatigue centrale".**
+Le raisonnement théorique : à l'effort long, les BCAA sont oxydés → leur taux plasmatique chute → le tryptophane libre (qui leur "fait concurrence" pour franchir la barrière hémato-encéphalique) entre plus facilement dans le cerveau → plus de **sérotonine** → sensation de fatigue centrale. La supplémentation en BCAA est censée retarder ce mécanisme.
+
+**En pratique, les preuves sont faibles et incohérentes** en conditions réelles, surtout lorsque l'apport en **glucides est suffisant** (les glucides limitent eux-mêmes la montée du tryptophane libre). Verdict pragmatique : avec un apport glucidique correct à l'effort et des protéines suffisantes sur la journée, **la supplémentation isolée en BCAA n'apporte pas grand-chose**. Mieux vaut viser des protéines complètes (qui contiennent les BCAA *et* les autres EAA).
+
+### La glutamine
+
+Acide aminé le plus abondant du plasma. Impliquée dans la **fonction immunitaire** et l'**intégrité de la barrière intestinale**. Son taux plasmatique chute après un effort intense/prolongé, ce qui a nourri la théorie de la "fenêtre immunitaire ouverte" post-effort.
+
+**⚠️ Débattu :** la supplémentation en glutamine pour soutenir l'immunité ou la performance a des **preuves globalement décevantes** chez l'athlète bien nourri. Un intérêt possible subsiste pour le confort digestif sur les très longs formats, mais sans consensus fort.
+
+### Acides aminés à visée ergogénique (hors construction protéique)
+
+Quelques dérivés d'acides aminés ont un intérêt documenté, surtout pour les **efforts à haute intensité** (relances, bosses, sprints) plus que pour l'ultra-endurance pure :
+
+| Composé | Mécanisme | Niveau de preuve |
+|---------|-----------|------------------|
+| **Bêta-alanine** | Précurseur de la **carnosine** musculaire (tampon contre l'acidose). Bénéfice sur efforts de ~1-4 min. | Solide pour la haute intensité |
+| **Citrulline / arginine** | Précurseurs du **monoxyde d'azote** (NO) — vasodilatation, débit sanguin. | ⚠️ Modeste, variable |
+| **Taurine** | Présente dans le muscle, rôle dans la contraction et l'antioxydation. | ⚠️ Émergent, incertain |
+
+Pour un profil ultra-trail, **la bêta-alanine** peut avoir un intérêt sur les portions explosives (montées raides), mais reste secondaire devant les fondamentaux (volume, glucides, récup).
+
+### Synthèse pratique — acides aminés
+
+- Vise des **protéines complètes** réparties en prises de ~20-40 g (≥ seuil leucine).
+- Une **prise post-effort** combinant protéines + glucides optimise la récupération (réparation + recharge glycogénique).
+- **Oublie les BCAA isolés** si ton alimentation est correcte : redondants.
+- Les acides aminés "ergogéniques" (bêta-alanine surtout) sont un *bonus* ciblé, pas une base.
+
+---
+
+## 3.4 Les acides gras essentiels : oméga-3 & oméga-6
+
+Deux familles d'acides gras polyinsaturés que l'organisme **ne peut pas synthétiser** : ce sont les seuls lipides réellement "essentiels".
+
+```
+OMÉGA-3 — chef de file : acide alpha-linolénique (ALA)
+  — se convertit (mal) en EPA et DHA, les formes biologiquement actives
+
+OMÉGA-6 — chef de file : acide linoléique (LA)
+  — se convertit en acide arachidonique (AA)
+```
+
+### Pourquoi ils comptent
+
+Ces acides gras ont deux rôles majeurs :
+
+1. **Structure membranaire** : ils s'intègrent aux membranes cellulaires et en règlent la **fluidité** (impact sur la fonction des récepteurs, le transport, etc.). Le DHA est particulièrement concentré dans le cerveau et la rétine.
+2. **Précurseurs des eicosanoïdes** : molécules de signalisation qui modulent l'**inflammation**.
+   - Les dérivés d'**oméga-3 (EPA/DHA)** — eicosanoïdes plutôt **anti-inflammatoires / résolvants**.
+   - Les dérivés d'**oméga-6 (AA)** — eicosanoïdes plutôt **pro-inflammatoires**.
+
+⚠️ Attention au raccourci : l'oméga-6 n'est **pas** "mauvais". L'acide arachidonique et l'inflammation aiguë sont **nécessaires** (réparation tissulaire, adaptation à l'entraînement). Le problème est un **déséquilibre chronique**, pas la présence d'oméga-6.
+
+### La question du ratio
+
+L'alimentation occidentale moderne fournit un ratio oméga-6:oméga-3 de l'ordre de **15-20:1**, contre un ratio ancestral estimé à **~1-4:1** (excès d'huiles végétales raffinées riches en LA, déficit en poissons gras).
+
+**⚠️ Débattu :** le cadre "ratio" est utile pédagogiquement mais **contesté**. Pour beaucoup de chercheurs, **l'apport absolu d'EPA + DHA** est un meilleur déterminant que le ratio lui-même. Autrement dit : augmenter les oméga-3 (EPA/DHA) prime sur l'obsession du dénominateur oméga-6.
+
+### Le piège de la conversion
+
+L'**ALA végétal** (lin, chia, noix) ne se convertit en EPA/DHA qu'à **~5-10 % (EPA) et < 1-5 % (DHA)**. Conséquence directe :
+
+| Source | Apporte |
+|--------|---------|
+| Poissons gras (saumon, maquereau, sardine, hareng) | EPA + DHA **directement** (forme active) |
+| Huile d'algue | EPA + DHA directement — **option végane** |
+| Lin, chia, noix | **ALA seulement** — conversion faible, ne suffit pas à couvrir les besoins en DHA |
+
+→ Compter uniquement sur les graines pour ses oméga-3 actifs est une erreur fréquente. Pour un végétarien/végan, **l'huile d'algue** est la voie fiable.
+
+### Intérêt pour l'athlète d'endurance
+
+- **Gestion de l'inflammation** et possible amélioration de la **récupération** (courbatures, marqueurs inflammatoires).
+- Bénéfices **cardiovasculaires** établis.
+- Effets potentiels sur la fonction neuromusculaire et la synthèse protéique (émergent).
+
+**⚠️ Nuance d'adaptation :** par analogie avec les antioxydants (voir 3.5), on pourrait craindre qu'émousser systématiquement l'inflammation post-effort nuise à l'adaptation. Pour les oméga-3 aux doses usuelles, **les données ne montrent globalement pas cet effet délétère** — ils sont considérés comme bénéfiques ou neutres. La prudence reste de mise pour les **mégadoses**.
+
+### Repères pratiques — oméga-3
+
+| Objectif | EPA + DHA / jour |
+|----------|-------------------|
+| Santé générale | ~250-500 mg |
+| Athlète (gestion inflammation/récup) | ~1-2 g (souvent cité, ⚠️ sans consensus ferme) |
+
+Le plus simple : **2-3 portions de poissons gras par semaine** couvrent l'essentiel. À défaut, une supplémentation EPA/DHA (ou huile d'algue) de qualité, en parallèle d'une **réduction des huiles végétales raffinées** riches en oméga-6.
+
+---
+
+## 3.5 Les micronutriments
+
+Vitamines et minéraux ne fournissent **aucune énergie**, mais sont les **cofacteurs** indispensables au métabolisme. Chez l'athlète d'endurance, les besoins sont accrus (pertes sudorales, turnover élevé, stress oxydatif) et certaines carences ont un **impact direct et démontré** sur la performance.
+
+### Le fer — le minéral critique de l'endurance
+
+Le plus important à surveiller. Composant de l'**hémoglobine** (transport de l'O₂), de la **myoglobine** (O₂ musculaire) et d'enzymes mitochondriales. Une carence dégrade directement le transport d'oxygène — la performance aérobie.
+
+**Pourquoi l'athlète d'endurance est à risque élevé :**
+
+```
+- Hémolyse d'impact (destruction de globules rouges à chaque foulée, surtout en course)
+- Pertes digestives microscopiques
+- Pertes sudorales
+- Menstruations (femmes)
+- Hepcidine : l'inflammation post-effort élève cette hormone qui BLOQUE
+  l'absorption intestinale du fer pendant plusieurs heures
+```
+
+**Point crucial :** une **carence sans anémie** (ferritine basse, hémoglobine encore normale) **dégrade déjà la performance** et la récupération. Le marqueur à suivre est la **ferritine**, pas seulement l'hémoglobine.
+
+**Optimiser l'absorption :**
+
+| Favorise | Inhibe |
+|----------|--------|
+| Fer héminique (viande, poisson) — bien mieux absorbé | Thé, café (tanins) autour du repas |
+| Vitamine C avec le fer non-héminique (végétal) | Calcium en même temps que le fer |
+| Prise du fer **loin de l'effort** (hepcidine basse, ex : matin au repos) | Prise juste après une séance (hepcidine haute) |
+
+**⚠️ Ne jamais se supplémenter en fer "à l'aveugle".** La **surcharge en fer est toxique** (foie, stress oxydatif). On teste (bilan martial : ferritine, coefficient de saturation) **avant** de supplémenter, idéalement avec un suivi médical.
+
+### Vitamine D
+
+Synthétisée par la peau sous UV. Rôles : **santé osseuse** (avec calcium), **fonction musculaire**, **immunité**.
+
+**Pertinence locale :** carence **très fréquente en hiver et aux latitudes nord** (faible ensoleillement) — un enjeu réel dans une région alpine comme **Annecy** de novembre à mars. Un bilan en fin d'hiver est pertinent, et une supplémentation hivernale souvent justifiée (à doser selon le statut).
+
+### Magnésium
+
+Cofacteur de **300+ réactions enzymatiques**, dont le métabolisme de l'**ATP** et la fonction neuromusculaire. Perdu dans la sueur, besoins accrus à fort volume.
+
+**⚠️ Débattu :** le lien magnésium — **crampes** est populaire mais **mal étayé** — les crampes d'effort relèvent surtout de la fatigue neuromusculaire, pas systématiquement d'un déficit en magnésium. Couvrir ses besoins reste utile pour le métabolisme énergétique ; n'attends pas un effet miracle anti-crampes.
+
+### Calcium
+
+**Santé osseuse** et contraction musculaire. Enjeu majeur à fort volume d'impact (course, dénivelé) et en cas de **déficit énergétique** : un apport énergétique insuffisant (RED-S, voir ci-dessous) fragilise l'os malgré un calcium correct.
+
+### Zinc
+
+**Immunité**, cicatrisation, synthèse protéique. Perdu dans la sueur — besoins légèrement accrus chez l'athlète. Carence associée à une fonction immunitaire diminuée.
+
+### Vitamines du groupe B
+
+Cofacteurs du **métabolisme énergétique** (B1, B2, B3, B6...) et de la production de globules rouges (**B9 folate, B12**). Généralement couvertes par un apport énergétique et une alimentation variés.
+
+**Point d'attention végan/végétarien :** la **B12** est quasi absente du végétal — **supplémentation indispensable** en régime végan. Folates et B12 conditionnent aussi la production de globules rouges, en lien avec le transport d'O₂.
+
+### Vitamines antioxydantes (C, E) — la nuance contre-intuitive
+
+**⚠️ Important — ne pas mégadoser.** Réflexe courant : avaler de fortes doses de vitamine C/E pour "mieux récupérer". **Contre-productif.** Les **espèces réactives de l'oxygène (ROS)** produites à l'effort ne sont pas que des déchets : ce sont des **signaux** qui déclenchent une partie des adaptations (biogenèse mitochondriale). Saturer l'organisme d'antioxydants **émousse ces signaux** et peut **réduire les bénéfices de l'entraînement**.
+
+→ Règle : couvrir ses besoins antioxydants **par l'alimentation** (fruits, légumes, variété), **pas par des mégadoses** de compléments en période d'entraînement.
+
+### RED-S — le contexte qui chapeaute tout
+
+**Relative Energy Deficiency in Sport.** Un apport énergétique chroniquement insuffisant par rapport à la dépense (souvent involontaire à fort volume) perturbe l'ensemble du système : **santé osseuse, hormones, immunité, performance**. Aucune optimisation micronutritionnelle ne compense un **déficit énergétique** de fond. C'est le garde-fou n°1 : **couvrir d'abord l'énergie totale**, ensuite affiner les micronutriments.
+
+### Synthèse pratique — micronutriments
+
+- **Fer** : le surveiller (ferritine), surtout en course et chez la femme. Tester avant de supplémenter.
+- **Vitamine D** : bilan/supplémentation hivernale pertinents en région alpine.
+- **Antioxydants (C/E)** : par l'alimentation, **pas de mégadoses**.
+- **B12** : supplémentation obligatoire si végan.
+- **Base de tout** : un apport énergétique suffisant (éviter le RED-S) et une alimentation variée couvrent l'essentiel ; la supplémentation cible les déficits **objectivés**, pas l'inverse.
+
+---
+
+## 3.6 Périodisation glucidique
 
 Concept moderne : **adapter l'apport glucidique à la demande du jour** ("fuel for the work required", Impey & coll.), plutôt qu'un apport élevé uniforme.
 
@@ -340,7 +666,7 @@ Concept moderne : **adapter l'apport glucidique à la demande du jour** ("fuel f
 
 ---
 
-## 3.4 Nutrition d'effort (longues sorties & course)
+## 3.7 Nutrition d'effort (longues sorties & course)
 
 Sur les efforts prolongés, l'apport glucidique externe devient déterminant — c'est ce qui retarde l'épuisement du glycogène.
 
@@ -366,15 +692,15 @@ C'est la base des gels et boissons "multi-transportables" : combiner glucose et 
 
 ### L'entraînement intestinal ("gut training")
 
-Tolérer 90 g/h ne s'improvise pas : l'intestin **s'entraîne**. Habituer progressivement le système digestif à de fortes charges glucidiques à l'effort réduit les troubles gastro-intestinaux le jour J. À travailler à l'entraînement, comme le reste.
+Tolérer 90 g/h ne s'improvise pas : l'intestin **s'entraîne**. Habituer progressivement le système digestif à de fortes charges glucidiques à l'effort réduit les troubles gastro-intestinaux le jour J. À travaillerr à l'entraînement, comme le reste.
 
 ---
 
-## 3.5 Hydratation
+## 3.8 Hydratation
 
 Hautement individuelle (le taux de sudation varie d'un facteur 3-4 entre individus).
 
-- **Volume** : ~0.4 à 0.8 L/h selon la chaleur et le taux de sudation. Se peser avant/après une longue séance donne une estimation directe des pertes (1 kg perdu ≈ 1 L).
+- **Volume** : ~0.4 – 0.8 L/h selon la chaleur et le taux de sudation. Se peser avant/après une longue séance donne une estimation directe des pertes (1 kg perdu ≈ 1 L).
 - **Sodium** : ~300-600 mg/L de boisson, davantage chez les "gros saleurs" et par forte chaleur. Le sodium soutient la volémie et l'absorption.
 
 **Éviter les deux extrêmes :** la déshydratation (> 2-3 % du poids corporel dégrade la performance) **et** la sur-hydratation à l'eau pure (risque d'**hyponatrémie**, dangereux sur les très longs efforts). Boire à sa soif, en salant, est un bon point de départ.
@@ -414,7 +740,7 @@ Causes principales : déshydratation → baisse du volume plasmatique → le cœ
 |-------|-------------------|
 | **ATL** | Acute Training Load — fatigue (moyenne pondérée 7 j) |
 | **CTL** | Chronic Training Load — forme (moyenne pondérée 42 j) |
-| **TSB** | Training Stress Balance — fraîcheur (CTL − ATL) |
+| **TSB** | Training Stress Balance — fraîcheur (CTL — ATL) |
 | **sRPE** | Charge perçue = RPE × durée |
 | **RPE** | Effort perçu, échelle 1-10 |
 | **TRIMP** | Training Impulse — charge basée sur la FC |
@@ -424,9 +750,29 @@ Causes principales : déshydratation → baisse du volume plasmatique → le cœ
 | **SV1 / SV2** | Seuils ventilatoires 1 (aérobie) et 2 (anaérobie) |
 | **MLSS** | Maximal Lactate Steady State — proche de SV2 |
 | **FatMax** | Intensité d'oxydation maximale des lipides |
+| **VO2max** | Consommation maximale d'oxygène — plafond aérobie |
+| **vVO2max** | Vitesse associée à VO2max |
+| **PMA** | Puissance aérobie maximale (équivalent vélo de vVO2max) |
+| **LTHR** | Fréquence cardiaque au seuil (Lactate Threshold HR) |
+| **DFA α1** | Indice HRV (detrended fluctuation analysis) estimant les seuils à l'effort |
+| **VDOT** | Indice de performance de Daniels, dérivé d'un temps de course |
+| **Économie de course** | Coût énergétique à allure donnée — déterminant majeur de la perf |
+| **DOMS** | Courbatures à retardement (dégâts musculaires, surtout en descente) |
+| **W'** | Réserve de travail au-dessus de la puissance critique (capacité anaérobie) |
 | **BMR** | Métabolisme de base |
 | **TDEE** | Dépense énergétique totale quotidienne |
 | **NEAT** | Dépense d'activité hors exercice structuré |
+| **EAA** | Acides aminés essentiels (9), non synthétisables |
+| **BCAA** | Acides aminés à chaîne ramifiée (leucine, isoleucine, valine) |
+| **mTOR** | Voie de signalisation déclenchant la synthèse protéique |
+| **MPS** | Synthèse protéique musculaire |
+| **EPA / DHA** | Oméga-3 actifs (issus du poisson/algue ou de la conversion de l'ALA) |
+| **ALA** | Acide alpha-linolénique — oméga-3 végétal, mal converti en EPA/DHA |
+| **LA / AA** | Acide linoléique (oméga-6) / acide arachidonique (son dérivé) |
+| **Ferritine** | Marqueur des réserves en fer (à surveiller en endurance) |
+| **Hepcidine** | Hormone qui bloque l'absorption du fer ; élevée après l'effort |
+| **ROS** | Espèces réactives de l'oxygène — déchets *et* signaux d'adaptation |
+| **RED-S** | Déficit énergétique relatif dans le sport |
 
 ---
 
@@ -437,12 +783,23 @@ Sélection de sources fondatrices pour approfondir :
 - **Banister EW** (1991) — modèle impulse-response fitness/fatigue (base de CTL/ATL/TSB et du TRIMP).
 - **Foster C** (1998) — *Monitoring training in athletes with reference to overtraining syndrome* (sRPE, monotonie, strain).
 - **Seiler S** (2010) — *What is best practice for training intensity and duration distribution?* (modèle polarisé).
+- **Daniels J** — *Daniels' Running Formula* (VDOT, allures d'entraînement par qualité).
+- **Billat V** — travaux sur la vVO2max et l'entraînement intermittent à VO2max.
+- **Laursen P & Buchheit M** — *Science and Application of High-Intensity Interval Training* (formats HIIT, dosage).
+- **Rogers B & Gronwald T** (2022) — DFA alpha-1 comme estimateur des seuils sur le terrain.
+- **Tanaka H et coll.** (2001) — équation de prédiction de la FCmax (208 − 0.7 × âge).
 - **Jeukendrup AE** — travaux sur l'oxydation des glucides exogènes et les glucides multi-transportables.
 - **Burke LM, Impey SG et coll.** — périodisation glucidique, "fuel for the work required".
 - **Brooks GA** — concept du point de crossover des substrats.
 - **Shaffer F & Ginsberg JP** (2017) — *An Overview of Heart Rate Variability Metrics and Norms* (référence sur l'interprétation des métriques HRV, y compris les limites de la LF).
 - **Documentation Kubios HRV** — définition des indices PNS/SNS et du Readiness.
 - **ACSM / IOC Consensus on Nutrition for Athletes** — recommandations macronutriments.
+- **Phillips SM & van Loon LJC** — besoins protéiques et rôle de la leucine/EAA dans l'adaptation.
+- **Calder PC** — oméga-3, eicosanoïdes et inflammation.
+- **Sim M, Garvican-Lewis LA et coll.** — métabolisme du fer chez l'athlète, rôle de l'hepcidine.
+- **Larson-Meyer DE, Willis KS** — vitamine D et performance.
+- **Powers SK, Jackson MJ** — ROS comme signaux d'adaptation, effet contre-productif des antioxydants à haute dose.
+- **Mountjoy M et coll.** (IOC Consensus) — syndrome RED-S.
 
 ---
 
