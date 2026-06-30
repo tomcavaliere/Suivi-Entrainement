@@ -39,6 +39,14 @@ except ImportError:
 
 OCR_AVAILABLE = EASYOCR_AVAILABLE or PYTESSERACT_AVAILABLE
 
+from physiology import (
+    bmr_mifflin, workout_kcal, compute_carb_adjustment,
+    compute_srpe, compute_trimp, compute_weekly_monotony_strain,
+    _hrv_eval_readiness, _hrv_eval_rmssd, _hrv_eval_pns,
+    _hrv_eval_sns, _hrv_eval_hr, _hrv_eval_sleep_h,
+)
+from fit_parser import parse_fit
+
 # ─────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────
@@ -263,253 +271,8 @@ def init_db():
 
 
 # ─────────────────────────────────────────────
-# FIT file parsing
-# ─────────────────────────────────────────────
-
-SPORT_MAP = {
-    "running": "Trail", "trail_running": "Trail",
-    "cycling": "Vélo", "swimming": "Natation",
-    "walking": "Trail", "generic": "Trail",
-}
-
-
-def _extract_hr_raw(data: bytes) -> list:
-    """
-    Minimal FIT binary parser: extract (timestamp_sec, heart_rate_bpm) pairs
-    from record messages (global_message_num=20, field 253=timestamp, field 3=HR).
-    Ignores all other fields and does NOT validate type/size compatibility,
-    so malformed fields in the definition don't break extraction.
-    Returns list of (int, int) tuples — timestamps are FIT epoch seconds.
-    """
-    import struct as _s
-    if len(data) < 12 or data[8:12] != b'.FIT':
-        return []
-    header_size = data[0]
-    pos = header_size
-    end = len(data) - 2  # exclude trailing CRC
-
-    local_defs = {}   # local_type -> dict(size, le, ts_off, ts_sz, hr_off, hr_sz)
-    result = []
-    last_ts = 0
-
-    while pos < end:
-        if pos >= len(data):
-            break
-        hdr = data[pos]; pos += 1
-
-        # ── Compressed timestamp record ──────────────────────────────────
-        if hdr & 0x80:
-            local_type = (hdr >> 5) & 0x03
-            time_offset = hdr & 0x1F
-            if local_type not in local_defs:
-                continue
-            d = local_defs[local_type]
-            ts = (last_ts & 0xFFFFFFE0) | time_offset
-            if ts < last_ts:
-                ts += 32
-            last_ts = ts
-            if pos + d['size'] > len(data):
-                break
-            rec = data[pos:pos + d['size']]; pos += d['size']
-            if d['hr_off'] is not None and d['hr_sz'] == 1:
-                hr = rec[d['hr_off']]
-                if 30 < hr < 220:
-                    result.append((ts, hr))
-            continue
-
-        is_def  = bool(hdr & 0x40)
-        has_dev = bool(hdr & 0x20)
-        local_type = hdr & 0x0F
-
-        # ── Definition message ────────────────────────────────────────────
-        if is_def:
-            if pos + 5 > len(data):
-                break
-            pos += 1  # reserved
-            le = (data[pos] == 0); pos += 1
-            fmt16 = '<H' if le else '>H'
-            global_num = _s.unpack_from(fmt16, data, pos)[0]; pos += 2
-            n_fields = data[pos]; pos += 1
-            if pos + n_fields * 3 > len(data):
-                break
-
-            total_size = 0
-            ts_off = ts_sz = hr_off = hr_sz = None
-            for _ in range(n_fields):
-                fnum  = data[pos]; pos += 1
-                fsize = data[pos]; pos += 1
-                pos += 1  # base_type (ignored — no size validation)
-                if global_num == 20:
-                    if fnum == 253: ts_off, ts_sz = total_size, fsize
-                    elif fnum == 3: hr_off, hr_sz = total_size, fsize
-                total_size += fsize
-
-            # Skip developer fields
-            if has_dev and pos < len(data):
-                n_dev = data[pos]; pos += 1
-                pos += n_dev * 3
-
-            # Store ALL definition types (not just record/20) so data messages
-            # for session/lap/event/etc. can be skipped rather than breaking.
-            local_defs[local_type] = dict(
-                size=total_size, le=le,
-                ts_off=ts_off, ts_sz=ts_sz,
-                hr_off=hr_off, hr_sz=hr_sz,
-            )
-
-        # ── Data message ──────────────────────────────────────────────────
-        else:
-            if local_type not in local_defs:
-                # Definition not seen yet — can't determine size, abort.
-                # This only happens if the FIT file is malformed (data before def).
-                break
-            d = local_defs[local_type]
-            if pos + d['size'] > len(data):
-                break
-            rec = data[pos:pos + d['size']]; pos += d['size']
-
-            ts = None
-            if d['ts_off'] is not None and d['ts_sz'] == 4:
-                fmt32 = '<I' if d['le'] else '>I'
-                ts = _s.unpack_from(fmt32, rec, d['ts_off'])[0]
-                if ts:
-                    last_ts = ts  # update for compressed-timestamp continuity
-            if ts and d['hr_off'] is not None and d['hr_sz'] == 1:
-                hr = rec[d['hr_off']]
-                if 30 < hr < 220:
-                    result.append((ts, hr))
-
-    return result
-
-
-def _iter_fit_messages(fitfile):
-    """Iterate FIT messages, skipping malformed ones (e.g. Coros non-standard field sizes)."""
-    gen = fitfile.get_messages()
-    while True:
-        try:
-            yield next(gen)
-        except StopIteration:
-            break
-        except Exception:
-            continue
-
-
-def _assign_zone(hr: float, bounds: list) -> int:
-    if   hr <= bounds[0]: return 0
-    elif hr <= bounds[1]: return 1
-    elif hr <= bounds[2]: return 2
-    elif hr <= bounds[3]: return 3
-    else:                 return 4
-
-
-def parse_fit(file_bytes: bytes, zone_map: dict) -> dict:
-    # ── fitparse for session / lap / sport metadata ───────────────────────
-    fitfile = fitparse.FitFile(io.BytesIO(file_bytes), check_crc=False)
-    calories = None
-    duration_s = None
-    elevation_m = 0
-    sport = "Trail"
-    avg_hr = None
-    max_hr_s = None
-    lap_data = []   # (elapsed_s, avg_hr) per lap — fallback Tier 2
-
-    for msg in _iter_fit_messages(fitfile):
-        fields = {}
-        for f in msg:
-            try:
-                if f.value is not None:
-                    fields[f.name] = f.value
-            except Exception:
-                continue
-        name = msg.name
-        if name == "session":
-            calories    = fields.get("total_calories", calories)
-            duration_s  = fields.get("total_elapsed_time", duration_s)
-            elevation_m = fields.get("total_ascent", elevation_m) or 0
-            raw_sport   = str(fields.get("sport", "")).lower()
-            sport       = SPORT_MAP.get(raw_sport, "Trail")
-            avg_hr      = fields.get("avg_heart_rate", avg_hr)
-            max_hr_s    = fields.get("max_heart_rate", max_hr_s)
-        elif name == "lap":
-            lap_s  = fields.get("total_elapsed_time") or fields.get("total_timer_time")
-            lap_hr = fields.get("avg_heart_rate")
-            if lap_s and lap_hr:
-                lap_data.append((float(lap_s), float(lap_hr)))
-
-    bounds = zone_map.get(sport, [130, 148, 163, 175])
-    z_sec = [0.0] * 5
-    expected_s = duration_s or 0
-
-    # Tier 0 — raw binary HR extraction (immune to fitparse field-size errors)
-    raw_hr_ts = _extract_hr_raw(file_bytes)
-    if raw_hr_ts:
-        for i in range(1, len(raw_hr_ts)):
-            dt = raw_hr_ts[i][0] - raw_hr_ts[i - 1][0]  # int seconds
-            if dt < 0 or dt > 300:
-                continue
-            if dt == 0:
-                dt = 1  # 1 Hz recording: same timestamp means 1 s elapsed
-            z_sec[_assign_zone(raw_hr_ts[i - 1][1], bounds)] += dt
-
-    # Tier 2 — lap summaries if raw extraction gave < 50 % coverage
-    if expected_s > 0 and sum(z_sec) < expected_s * 0.5 and lap_data:
-        z_sec = [0.0] * 5
-        for lap_s, lap_hr in lap_data:
-            z_sec[_assign_zone(lap_hr, bounds)] += lap_s
-
-    # Tier 3 — session avg_hr if still < 50 % coverage
-    if expected_s > 0 and sum(z_sec) < expected_s * 0.5 and avg_hr:
-        z_sec = [0.0] * 5
-        z_sec[_assign_zone(avg_hr, bounds)] = expected_s
-
-    return {
-        "sport":           sport,
-        "duration_min":    round(duration_s / 60) if duration_s else None,
-        "elevation_m":     int(elevation_m),
-        "calories":        int(calories) if calories else None,
-        "avg_hr":          avg_hr,
-        "max_hr_session":  max_hr_s,
-        "hr_z1_min": z_sec[0] / 60, "hr_z2_min": z_sec[1] / 60,
-        "hr_z3_min": z_sec[2] / 60, "hr_z4_min": z_sec[3] / 60,
-        "hr_z5_min": z_sec[4] / 60,
-    }
-
-
-# ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
-
-def bmr_mifflin(weight_kg: float, height_cm: float, age: int, sex: str) -> float:
-    base = 10 * weight_kg + 6.25 * height_cm - 5 * age
-    return base + 5 if sex == "Homme" else base - 161
-
-
-MET_TABLE = {
-    ("Trail",    "Zone 2"):          8.0,
-    ("Trail",    "Fractionné/PMA"): 11.0,
-    ("Vélo",     "Zone 2"):          6.5,
-    ("Vélo",     "Fractionné/PMA"):  9.5,
-    ("Athlé",    "Zone 2"):          7.0,
-    ("Athlé",    "Fractionné/PMA"): 10.5,
-    ("Natation", "Zone 2"):          6.0,
-    ("Natation", "Fractionné/PMA"):  8.5,
-}
-
-
-def training_kcal_estimate(weight_kg, sport, intensity, duration_min, elevation_m):
-    met = MET_TABLE.get((sport, intensity), 7.0)
-    base = met * weight_kg * (duration_min / 60)
-    if elevation_m > 0:
-        base += 0.5 * weight_kg * (elevation_m / 100)
-    return round(base)
-
-
-def workout_kcal(row, weight_kg: float) -> float:
-    if pd.notna(row.kcal_actual) and row.kcal_actual:
-        return float(row.kcal_actual)
-    return training_kcal_estimate(weight_kg, row.type, row.intensity,
-                                  row.duration_min, row.elevation_m)
-
 
 @st.cache_resource(show_spinner="Chargement du modèle OCR (première fois uniquement)…")
 def _get_easyocr_reader():
@@ -578,22 +341,6 @@ def parse_nutrition_text(text: str) -> dict:
     return result
 
 
-_ZONE_CARB_RATE = [0.2, 0.4, 0.65, 0.9, 1.1]  # g glycogen/min burned per zone
-
-
-def compute_carb_adjustment(wks_df: pd.DataFrame) -> int:
-    """Extra carbs (g) to replenish glycogen from today's training zones."""
-    if wks_df.empty:
-        return 0
-    extra = 0.0
-    for _, w in wks_df.iterrows():
-        for rate, col in zip(_ZONE_CARB_RATE,
-                             ["hr_z1_min", "hr_z2_min", "hr_z3_min", "hr_z4_min", "hr_z5_min"]):
-            val = getattr(w, col, 0) or 0
-            extra += rate * float(val)
-    return round(extra)
-
-
 def load_profile(conn) -> dict:
     row = conn.execute(
         "SELECT weight_kg, height_cm, age, sex, base_tdee, "
@@ -655,24 +402,6 @@ def load_workouts(conn, d: str) -> pd.DataFrame:
 # Training load metrics
 # ─────────────────────────────────────────────
 
-def compute_srpe(rpe, duration_min):
-    if rpe is None:
-        return None
-    return float(rpe) * float(duration_min)
-
-
-def compute_trimp(duration_min, avg_hr, hr_repos, hr_max):
-    if avg_hr is None:
-        return None
-    hr_range = float(hr_max) - float(hr_repos)
-    if hr_range <= 0:
-        return None
-    delta = (float(avg_hr) - float(hr_repos)) / hr_range
-    if delta <= 0:
-        return None
-    return float(duration_min) * delta * 0.64 * math.exp(1.92 * delta)
-
-
 def load_charge_history(conn, hr_repos: int, hr_max: int) -> pd.DataFrame:
     """Return daily DataFrame with srpe, trimp, ATL, CTL, TSB over all history."""
     all_wks = pd.read_sql_query(
@@ -729,34 +458,6 @@ def load_charge_history(conn, hr_repos: int, hr_max: int) -> pd.DataFrame:
     daily["CTL"] = ctl_list
     daily["TSB"] = tsb_list
     return daily
-
-
-def compute_weekly_monotony_strain(daily_df: pd.DataFrame, weeks: int = 12) -> pd.DataFrame:
-    """Monotony and strain per calendar week for the last `weeks` weeks."""
-    if daily_df.empty:
-        return pd.DataFrame(columns=["week_start", "load_sum", "monotony", "strain"])
-
-    today   = pd.Timestamp(date.today())
-    monday  = today - pd.Timedelta(days=today.weekday())
-    records = []
-    for w in range(weeks - 1, -1, -1):
-        w_start  = monday - pd.Timedelta(weeks=w)
-        w_end    = w_start + pd.Timedelta(days=6)
-        mask     = (daily_df["date"] >= w_start) & (daily_df["date"] <= w_end)
-        charges  = daily_df.loc[mask, "srpe"].fillna(0.0).values
-        if len(charges) == 0:
-            charges = np.zeros(7)
-        mean_c   = float(np.mean(charges))
-        std_c    = float(np.std(charges))
-        monotony = mean_c / std_c if std_c > 1e-6 else 1.0
-        load_sum = float(np.sum(charges))
-        records.append({
-            "week_start": w_start.strftime("%d/%m"),
-            "load_sum":   round(load_sum, 1),
-            "monotony":   round(monotony, 2),
-            "strain":     round(load_sum * monotony, 1),
-        })
-    return pd.DataFrame(records)
 
 
 # ─────────────────────────────────────────────
@@ -854,40 +555,6 @@ def _hrv_badge(label: str, color: str) -> str:
         f"<span style='background:{color};color:#fff;padding:2px 10px;"
         f"border-radius:10px;font-size:0.74em;font-weight:600'>{label}</span></div>"
     )
-
-def _hrv_eval_readiness(v: float):
-    if v >= 80:  return ("Élevé",    "#3498db")
-    if v >= 50:  return ("Normal",   "#2ecc71")
-    if v >= 30:  return ("Bas",      "#f39c12")
-    return           ("Très bas",  "#e74c3c")
-
-def _hrv_eval_rmssd(v: float):
-    if v > 75:   return ("Excellent", "#3498db")
-    if v >= 50:  return ("Bon",       "#2ecc71")
-    if v >= 19:  return ("Normal",    "#f39c12")
-    return           ("Faible",    "#e74c3c")
-
-def _hrv_eval_pns(v: float):
-    if v > 1:    return ("Élevé",  "#3498db")
-    if v >= -1:  return ("Normal", "#2ecc71")
-    return           ("Faible", "#e74c3c")
-
-def _hrv_eval_sns(v: float):
-    if v > 1:    return ("Élevé", "#e74c3c")
-    if v >= -1:  return ("Normal", "#2ecc71")
-    return           ("Bas",    "#3498db")
-
-def _hrv_eval_hr(v: int):
-    if v < 40:   return ("Très bas",  "#9b59b6")
-    if v <= 60:  return ("Athlète",   "#2ecc71")
-    if v <= 77:  return ("Normal",    "#f39c12")
-    return           ("Élevé",    "#e74c3c")
-
-def _hrv_eval_sleep_h(v: float):
-    if 7.0 <= v <= 9.0:  return ("Optimal",     "#2ecc71")
-    if v >= 6.0:         return ("Insuffisant",  "#f39c12")
-    if v > 9.0:          return ("Prolongé",     "#3498db")
-    return                    ("Trop court",  "#e74c3c")
 
 
 # ─────────────────────────────────────────────
